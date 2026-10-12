@@ -1,0 +1,13 @@
+{
+  "name": "bizos-ai-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && uvicorn app.main:app --reload --port 8000"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
