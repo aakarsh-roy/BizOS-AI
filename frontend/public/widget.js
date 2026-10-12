@@ -1,0 +1,438 @@
+(function() {
+    // Inject marked.js for markdown rendering
+    const markedScript = document.createElement('script');
+    markedScript.src = 'https://cdn.jsdelivr.net/npm/marked/marked.min.js';
+    document.head.appendChild(markedScript);
+
+    // Inject Styles
+    const style = document.createElement('style');
+    style.innerHTML = `
+        #bizos-widget-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 999999;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        #bizos-chat-button {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: white;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3), 0 4px 6px -2px rgba(37, 99, 235, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        #bizos-chat-button:hover {
+            transform: scale(1.08);
+            box-shadow: 0 20px 25px -5px rgba(37, 99, 235, 0.4), 0 10px 10px -5px rgba(37, 99, 235, 0.2);
+        }
+        #bizos-chat-window {
+            display: none;
+            position: absolute;
+            bottom: 84px;
+            right: 0;
+            width: 380px;
+            height: 600px;
+            max-height: calc(100vh - 120px);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid rgba(229, 231, 235, 0.5);
+            transform-origin: bottom right;
+            animation: bizosPopIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes bizosPopIn {
+            0% { opacity: 0; transform: scale(0.9) translateY(20px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        #bizos-chat-header {
+            background: linear-gradient(135deg, #1e3a8a, #2563eb);
+            color: white;
+            padding: 18px 20px;
+            font-weight: 600;
+            font-size: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #bizos-chat-header .title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #bizos-chat-header .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #34d399;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #34d399;
+        }
+        #bizos-close-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            cursor: pointer;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: background 0.2s;
+        }
+        #bizos-close-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        #bizos-chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            background-color: #f8fafc;
+            scroll-behavior: smooth;
+        }
+        .bizos-message {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.5;
+            animation: bizosMessageSlide 0.3s ease-out;
+            word-wrap: break-word;
+        }
+        .bizos-message p {
+            margin: 0 0 8px 0;
+        }
+        .bizos-message p:last-child {
+            margin: 0;
+        }
+        .bizos-message a {
+            color: #2563eb;
+            text-decoration: underline;
+        }
+        .bizos-message pre {
+            background: #1e293b;
+            color: #f8fafc;
+            padding: 8px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 8px 0;
+        }
+        .bizos-message code {
+            font-family: monospace;
+            background: rgba(0,0,0,0.05);
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        @keyframes bizosMessageSlide {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .bizos-user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            color: white;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.1);
+        }
+        .bizos-user code {
+            background: rgba(255,255,255,0.2);
+        }
+        .bizos-user a {
+            color: #fff;
+        }
+        .bizos-ai {
+            align-self: flex-start;
+            background-color: white;
+            color: #1e293b;
+            border: 1px solid #e2e8f0;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+        #bizos-chat-input-container {
+            padding: 16px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        #bizos-chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #cbd5e1;
+            border-radius: 24px;
+            outline: none;
+            font-family: inherit;
+            font-size: 14px;
+            background-color: #f8fafc;
+            color: #0f172a;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        #bizos-chat-input:focus {
+            border-color: #3b82f6;
+            background-color: white;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        #bizos-send-btn {
+            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s, background 0.2s;
+            box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+        }
+        #bizos-send-btn:hover {
+            transform: scale(1.05);
+        }
+        #bizos-send-btn:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .bizos-typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 12px 16px;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            border-bottom-left-radius: 4px;
+            align-self: flex-start;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+            animation: bizosMessageSlide 0.3s ease-out;
+            width: fit-content;
+        }
+        .bizos-typing-dot {
+            width: 6px;
+            height: 6px;
+            background-color: #94a3b8;
+            border-radius: 50%;
+            animation: bizosTypingBounce 1.4s infinite ease-in-out both;
+        }
+        .bizos-typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .bizos-typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bizosTypingBounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+        @media (max-width: 480px) {
+            #bizos-chat-window {
+                width: calc(100vw - 40px);
+                height: calc(100vh - 120px);
+                bottom: 80px;
+                right: 20px;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+
+    // Add Inter font
+    const font = document.createElement('link');
+    font.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap';
+    font.rel = 'stylesheet';
+    document.head.appendChild(font);
+
+    // Create Elements
+    const container = document.createElement('div');
+    container.id = 'bizos-widget-container';
+    
+    const button = document.createElement('button');
+    button.id = 'bizos-chat-button';
+    button.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
+    
+    const chatWindow = document.createElement('div');
+    chatWindow.id = 'bizos-chat-window';
+    chatWindow.innerHTML = `
+        <div id="bizos-chat-header">
+            <div class="title">
+                <div class="status-dot"></div>
+                <span>Support Assistant</span>
+            </div>
+            <button id="bizos-close-btn">&times;</button>
+        </div>
+        <div id="bizos-chat-messages">
+            <div class="bizos-message bizos-ai">Hi! I'm here to help. How can I assist you today?</div>
+        </div>
+        <div id="bizos-chat-input-container">
+            <input type="text" id="bizos-chat-input" placeholder="Type a message..." autocomplete="off" />
+            <button id="bizos-send-btn">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+        </div>
+    `;
+
+    container.appendChild(chatWindow);
+    container.appendChild(button);
+    document.body.appendChild(container);
+
+    // Logic
+    const scriptTag = document.currentScript || document.querySelector('script[src*="widget.js"]');
+    const companyId = scriptTag ? scriptTag.getAttribute('data-company-id') : null;
+    let conversationId = sessionStorage.getItem('bizos_conversation_id');
+    
+    const apiUrl = 'http://localhost:8000/api/chat/widget/stream'; // Adjust for production
+
+    const messagesContainer = document.getElementById('bizos-chat-messages');
+    const inputField = document.getElementById('bizos-chat-input');
+    const sendBtn = document.getElementById('bizos-send-btn');
+    let isWaitingForResponse = false;
+
+    button.addEventListener('click', () => {
+        const isHidden = chatWindow.style.display === '' || chatWindow.style.display === 'none';
+        chatWindow.style.display = isHidden ? 'flex' : 'none';
+        if (isHidden) {
+            inputField.focus();
+        }
+    });
+
+    document.getElementById('bizos-close-btn').addEventListener('click', () => {
+        chatWindow.style.display = 'none';
+    });
+
+    function showTypingIndicator() {
+        const id = 'typing-' + Date.now();
+        const indicator = document.createElement('div');
+        indicator.id = id;
+        indicator.className = 'bizos-typing-indicator';
+        indicator.innerHTML = '<div class="bizos-typing-dot"></div><div class="bizos-typing-dot"></div><div class="bizos-typing-dot"></div>';
+        messagesContainer.appendChild(indicator);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        return id;
+    }
+
+    function removeTypingIndicator(id) {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    }
+
+    // Basic markdown fallback if marked.js fails to load
+    function parseMarkdown(text) {
+        if (typeof marked !== 'undefined') {
+            return marked.parse(text);
+        }
+        return text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/`(.*?)`/g, '<code>$1</code>')
+            .replace(/\n/g, '<br>');
+    }
+
+    async function sendMessage() {
+        const text = inputField.value.trim();
+        if (!text || !companyId || isWaitingForResponse) return;
+
+        inputField.value = '';
+        inputField.disabled = true;
+        sendBtn.disabled = true;
+        isWaitingForResponse = true;
+        
+        appendMessage(text, 'bizos-user');
+        
+        const typingId = showTypingIndicator();
+        let aiMessageId = null;
+        let aiMessageEl = null;
+        let rawContent = "";
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    company_id: companyId,
+                    message: text,
+                    conversation_id: conversationId
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error("Server error");
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+                            if (data.type === 'conversation_id') {
+                                conversationId = data.data;
+                                sessionStorage.setItem('bizos_conversation_id', conversationId);
+                            } else if (data.type === 'content') {
+                                if (!aiMessageEl) {
+                                    removeTypingIndicator(typingId);
+                                    aiMessageId = 'msg-' + Date.now();
+                                    appendMessage('', 'bizos-ai', aiMessageId);
+                                    aiMessageEl = document.getElementById(aiMessageId);
+                                }
+                                rawContent += data.data;
+                                aiMessageEl.innerHTML = parseMarkdown(rawContent);
+                                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            } else if (data.type === 'error') {
+                                if (!aiMessageEl) removeTypingIndicator(typingId);
+                                appendMessage("Sorry, I encountered an error. Please try again.", 'bizos-ai');
+                            }
+                        } catch (e) {
+                            // ignore parse errors for partial chunks
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            removeTypingIndicator(typingId);
+            appendMessage("Sorry, the chat service is currently unavailable.", 'bizos-ai');
+        } finally {
+            inputField.disabled = false;
+            sendBtn.disabled = false;
+            isWaitingForResponse = false;
+            inputField.focus();
+        }
+    }
+
+    sendBtn.addEventListener('click', sendMessage);
+    inputField.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
+
+    function appendMessage(text, className, id = null) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `bizos-message ${className}`;
+        if (id) msgDiv.id = id;
+        msgDiv.innerHTML = text ? parseMarkdown(text) : '';
+        messagesContainer.appendChild(msgDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+})();
