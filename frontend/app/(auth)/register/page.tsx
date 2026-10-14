@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { apiErrorMessage } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -30,8 +31,8 @@ export default function RegisterPage() {
     try {
       await register(name, email, password);
       router.push("/onboarding");
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "Registration failed. Please try again.");
+    } catch (err) {
+      setError(apiErrorMessage(err, "Registration failed. Please try again."));
     } finally {
       setLoading(false);
     }

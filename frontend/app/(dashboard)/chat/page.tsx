@@ -1,18 +1,16 @@
 "use client";
 
-import { useEffect, useState, useRef, use } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
-import { chatAPI } from "@/services/api";
-import { AGENT_CONFIG, type AgentType, type Conversation, type Message } from "@/types";
+import { chatAPI, chatbotAPI } from "@/services/api";
+import type { ChatbotConfig, Conversation, Message, Source, ToolAction } from "@/types";
 import {
   Send,
   Loader2,
   Plus,
   MessageSquare,
   ChevronLeft,
-  Upload,
-  FileText,
   ExternalLink,
   Wrench,
   CheckCircle2,
@@ -23,11 +21,7 @@ import {
   ListChecks,
   UserPlus,
   Users,
-  BarChart3,
-  TrendingUp,
-  MessageCircle,
   FileSearch,
-  AlertCircle,
 } from "lucide-react";
 
 // Tool display config
@@ -38,20 +32,12 @@ const TOOL_CONFIG: Record<string, { icon: React.ReactNode; label: string; color:
   update_ticket: { icon: <Wrench className="w-3.5 h-3.5" />, label: "Updating ticket", color: "text-amber-400" },
   create_lead: { icon: <UserPlus className="w-3.5 h-3.5" />, label: "Saving lead", color: "text-emerald-400" },
   list_leads: { icon: <Users className="w-3.5 h-3.5" />, label: "Querying leads", color: "text-violet-400" },
-  get_analytics_summary: { icon: <BarChart3 className="w-3.5 h-3.5" />, label: "Pulling analytics", color: "text-rose-400" },
-  query_ticket_trends: { icon: <TrendingUp className="w-3.5 h-3.5" />, label: "Analyzing ticket trends", color: "text-orange-400" },
-  query_conversation_stats: { icon: <MessageCircle className="w-3.5 h-3.5" />, label: "Analyzing conversations", color: "text-purple-400" },
   list_documents: { icon: <FileSearch className="w-3.5 h-3.5" />, label: "Listing documents", color: "text-teal-400" },
 };
 
 interface ToolCallEvent {
   tool: string;
-  args: Record<string, any>;
-}
-
-interface ToolResultEvent {
-  tool: string;
-  result: Record<string, any>;
+  args: Record<string, unknown>;
 }
 
 function ToolCallBadge({ tool, status }: { tool: string; status: "running" | "done" }) {
@@ -77,7 +63,7 @@ function ToolCallBadge({ tool, status }: { tool: string; status: "running" | "do
   );
 }
 
-function AgentActionsPanel({ actions }: { actions: any[] }) {
+function ActionsPanel({ actions }: { actions: ToolAction[] }) {
   const [expanded, setExpanded] = useState(false);
   if (!actions || actions.length === 0) return null;
 
@@ -100,7 +86,7 @@ function AgentActionsPanel({ actions }: { actions: any[] }) {
             className="overflow-hidden"
           >
             <div className="mt-2 space-y-2">
-              {actions.map((action: any, i: number) => {
+              {actions.map((action: ToolAction, i: number) => {
                 const config = TOOL_CONFIG[action.tool] || { icon: <Wrench className="w-3.5 h-3.5" />, label: action.tool, color: "text-gray-400" };
                 const isSuccess = action.result?.success !== false && !action.result?.error;
                 return (
@@ -143,10 +129,8 @@ function AgentActionsPanel({ actions }: { actions: any[] }) {
   );
 }
 
-export default function ChatPage({ params }: { params: Promise<{ agent: string }> }) {
-  const { agent: agentType } = use(params);
-  const config = AGENT_CONFIG[agentType as AgentType];
-
+export default function ChatPage() {
+  const [config, setConfig] = useState<ChatbotConfig | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversation, setActiveConversation] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -156,11 +140,12 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
   const [streamingContent, setStreamingContent] = useState("");
   const [showSidebar, setShowSidebar] = useState(true);
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallEvent[]>([]);
-  const [completedToolCalls, setCompletedToolCalls] = useState<ToolResultEvent[]>([]);
+  const [completedToolCalls, setCompletedToolCalls] = useState<ToolAction[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const botName = config?.name || "Assistant";
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -168,24 +153,28 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
 
   useEffect(scrollToBottom, [messages, streamingContent, activeToolCalls]);
 
-  // Fetch conversations
+  // Fetch chatbot config + conversations
   useEffect(() => {
-    const fetchConversations = async () => {
+    const loadData = async () => {
       try {
-        const { data } = await chatAPI.listConversations(agentType);
-        setConversations(data.conversations);
+        const [cfg, convs] = await Promise.all([
+          chatbotAPI.getConfig(),
+          chatAPI.listConversations(),
+        ]);
+        setConfig(cfg.data);
+        setConversations(convs.data.conversations);
       } catch (err) {
-        console.error("Failed to fetch conversations:", err);
+        console.error("Failed to load chat data:", err);
       }
     };
-    fetchConversations();
-  }, [agentType]);
+    loadData();
+  }, []);
 
   // Fetch messages for active conversation
   useEffect(() => {
     if (!activeConversation) {
-      setMessages([]);
-      return;
+      const t = setTimeout(() => setMessages([]), 0);
+      return () => clearTimeout(t);
     }
 
     const fetchMessages = async () => {
@@ -196,7 +185,10 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
         console.error("Failed to fetch messages:", err);
       }
     };
-    fetchMessages();
+    const t = setTimeout(() => {
+      fetchMessages();
+    }, 0);
+    return () => clearTimeout(t);
   }, [activeConversation]);
 
   const handleSend = async () => {
@@ -219,11 +211,10 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
     setMessages((prev) => [...prev, tempUserMsg]);
 
     try {
-      // Use streaming endpoint
       setStreaming(true);
       setStreamingContent("");
 
-      const response = await chatAPI.sendStream(agentType, {
+      const response = await chatAPI.sendStream({
         message: userMessage,
         conversation_id: activeConversation || undefined,
       });
@@ -233,8 +224,8 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let fullContent = "";
-      let sources: any[] = [];
-      let actions: any[] = [];
+      let sources: Source[] = [];
+      let actions: ToolAction[] = [];
 
       if (reader) {
         while (true) {
@@ -249,13 +240,12 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
             try {
               const data = JSON.parse(line.slice(6));
 
-              if (data.type === "conversation_id" && !activeConversation) {
+              if (data.type === "conversation_id") {
+                // Always adopt the server's conversation id (handles stale ids)
                 setActiveConversation(data.data);
               } else if (data.type === "tool_call") {
-                // Agent is calling a tool — show in UI
                 setActiveToolCalls((prev) => [...prev, data.data]);
               } else if (data.type === "tool_result") {
-                // Tool finished — move from active to completed
                 setActiveToolCalls((prev) => prev.filter((tc) => tc.tool !== data.data.tool));
                 setCompletedToolCalls((prev) => [...prev, data.data]);
               } else if (data.type === "content") {
@@ -266,7 +256,7 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
               } else if (data.type === "actions") {
                 actions = data.data;
               } else if (data.type === "error") {
-                fullContent += `\n\n⚠️ Error: ${data.data}`;
+                fullContent += `\n\n⚠️ ${data.data}`;
                 setStreamingContent(fullContent);
               }
             } catch {
@@ -280,7 +270,6 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
       setStreamingContent("");
       setActiveToolCalls([]);
 
-      // Add assistant message
       const assistantMsg: Message = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
@@ -291,21 +280,18 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
       };
       setMessages((prev) => [...prev, assistantMsg]);
 
-      // Refresh conversations list
-      const { data: convData } = await chatAPI.listConversations(agentType);
+      const { data: convData } = await chatAPI.listConversations();
       setConversations(convData.conversations);
     } catch (err) {
       console.error("Chat error:", err);
       // Fallback to non-streaming
       try {
-        const { data } = await chatAPI.send(agentType, {
+        const { data } = await chatAPI.send({
           message: userMessage,
           conversation_id: activeConversation || undefined,
         });
 
-        if (!activeConversation) {
-          setActiveConversation(data.conversation_id);
-        }
+        setActiveConversation(data.conversation_id);
 
         const assistantMsg: Message = {
           id: `assistant-${Date.now()}`,
@@ -317,7 +303,7 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
         };
         setMessages((prev) => [...prev, assistantMsg]);
 
-        const { data: convData } = await chatAPI.listConversations(agentType);
+        const { data: convData } = await chatAPI.listConversations();
         setConversations(convData.conversations);
       } catch (fallbackErr) {
         console.error("Fallback failed:", fallbackErr);
@@ -338,50 +324,6 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
     }
   };
 
-  const handleFileUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    if (!["revenue", "finance"].includes(agentType)) return;
-
-    const file = files[0];
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("message", input || `Analyze this file: ${file.name}`);
-    if (activeConversation) {
-      formData.append("conversation_id", activeConversation);
-    }
-
-    setInput("");
-    setLoading(true);
-
-    const tempMsg: Message = {
-      id: `temp-${Date.now()}`,
-      role: "user",
-      content: `[Uploaded: ${file.name}]\n${input || `Analyze this file: ${file.name}`}`,
-      sources: [],
-      created_at: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, tempMsg]);
-
-    try {
-      const { data } = await chatAPI.uploadAndChat(agentType, formData);
-      if (!activeConversation) setActiveConversation(data.conversation_id);
-
-      const assistantMsg: Message = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        content: data.message,
-        sources: data.sources || [],
-        actions: data.actions || [],
-        created_at: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Upload failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const startNewChat = () => {
     setActiveConversation(null);
     setMessages([]);
@@ -393,14 +335,6 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
       handleSend();
     }
   };
-
-  if (!config) {
-    return (
-      <div className="flex items-center justify-center h-[80vh]">
-        <p className="text-muted">Invalid agent type</p>
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-full w-full">
@@ -437,6 +371,11 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
                   <div className="flex items-center gap-2">
                     <MessageSquare className="w-4 h-4 shrink-0" />
                     <span className="truncate">{conv.title}</span>
+                    {conv.agent_type === "widget" && (
+                      <span className="ml-auto shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                        Visitor
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-muted/60 mt-1 ml-6">
                     {new Date(conv.updated_at).toLocaleDateString()}
@@ -462,17 +401,22 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
               }`}
             />
           </button>
-          <span className="text-2xl">{config.icon}</span>
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold"
+            style={{ backgroundColor: config?.widget_color || "#2563eb" }}
+          >
+            {(botName || "A")[0].toUpperCase()}
+          </div>
           <div>
-            <h2 className="font-semibold">{config.name}</h2>
+            <h2 className="font-semibold">{botName}</h2>
             <p className="text-xs text-muted/60">
-              {config.description}
+              Test your chatbot and review conversations
             </p>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <div className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-1.5">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 pulse-dot" />
-              <span className="text-xs text-emerald-400 font-medium">Agent</span>
+              <span className="text-xs text-emerald-400 font-medium">Live</span>
             </div>
           </div>
         </div>
@@ -481,43 +425,21 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
           {messages.length === 0 && !streaming && (
             <div className="flex flex-col items-center justify-center h-full text-center">
-              <span className="text-5xl mb-4">{config.icon}</span>
-              <h3 className="text-xl font-semibold mb-2">{config.name}</h3>
+              <div
+                className="w-16 h-16 rounded-2xl flex items-center justify-center text-white text-2xl font-bold mb-4"
+                style={{ backgroundColor: config?.widget_color || "#2563eb" }}
+              >
+                {(botName || "A")[0].toUpperCase()}
+              </div>
+              <h3 className="text-xl font-semibold mb-2">{botName}</h3>
               <p className="text-muted max-w-md mb-4">
-                {config.description}. This is a real AI agent that can take actions —
-                not just chat.
+                {config?.welcome_message ||
+                  "Ask anything about your business knowledge, or try creating a ticket or capturing a lead."}
               </p>
               <div className="flex flex-wrap gap-2 justify-center max-w-lg">
-                {agentType === "support" && (
-                  <>
-                    <SuggestionChip text="Create a ticket for login issues" onClick={(t) => { setInput(t); }} />
-                    <SuggestionChip text="Show me open tickets" onClick={(t) => { setInput(t); }} />
-                  </>
-                )}
-                {agentType === "sales" && (
-                  <>
-                    <SuggestionChip text="Show me all leads" onClick={(t) => { setInput(t); }} />
-                    <SuggestionChip text="What products do we offer?" onClick={(t) => { setInput(t); }} />
-                  </>
-                )}
-                {agentType === "operations" && (
-                  <>
-                    <SuggestionChip text="Give me today's executive summary" onClick={(t) => { setInput(t); }} />
-                    <SuggestionChip text="What's our support queue look like?" onClick={(t) => { setInput(t); }} />
-                  </>
-                )}
-                {agentType === "revenue" && (
-                  <>
-                    <SuggestionChip text="Show me overall business metrics" onClick={(t) => { setInput(t); }} />
-                    <SuggestionChip text="How is agent usage trending?" onClick={(t) => { setInput(t); }} />
-                  </>
-                )}
-                {agentType === "finance" && (
-                  <>
-                    <SuggestionChip text="Analyze our operational costs" onClick={(t) => { setInput(t); }} />
-                    <SuggestionChip text="Show ticket volume trends" onClick={(t) => { setInput(t); }} />
-                  </>
-                )}
+                <SuggestionChip text="What does my business offer?" onClick={(t) => { setInput(t); }} />
+                <SuggestionChip text="Show me open tickets" onClick={(t) => { setInput(t); }} />
+                <SuggestionChip text="I'd like to talk to sales" onClick={(t) => { setInput(t); }} />
               </div>
             </div>
           )}
@@ -532,8 +454,11 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
               }`}
             >
               {msg.role === "assistant" && (
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-sm shrink-0 mt-1">
-                  {config.icon}
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 mt-1 text-white font-bold"
+                  style={{ backgroundColor: config?.widget_color || "#2563eb" }}
+                >
+                  {(botName || "A")[0].toUpperCase()}
                 </div>
               )}
 
@@ -552,9 +477,8 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
                   <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                 )}
 
-                {/* Agent Actions Panel */}
-                {msg.role === "assistant" && (msg as any).actions && (
-                  <AgentActionsPanel actions={(msg as any).actions} />
+                {msg.role === "assistant" && msg.actions && (
+                  <ActionsPanel actions={msg.actions} />
                 )}
 
                 {/* Source Citations */}
@@ -593,8 +517,11 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
               animate={{ opacity: 1 }}
               className="flex gap-4"
             >
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-sm shrink-0 mt-1">
-                {config.icon}
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 mt-1 text-white font-bold"
+                style={{ backgroundColor: config?.widget_color || "#2563eb" }}
+              >
+                {(botName || "A")[0].toUpperCase()}
               </div>
               <div className="bg-surface border border-border rounded-2xl rounded-tl-md px-4 py-3">
                 <div className="flex flex-wrap gap-2">
@@ -616,8 +543,11 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
               animate={{ opacity: 1 }}
               className="flex gap-4"
             >
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-sm shrink-0 mt-1">
-                {config.icon}
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 text-white font-bold"
+                style={{ backgroundColor: config?.widget_color || "#2563eb" }}
+              >
+                {(botName || "A")[0].toUpperCase()}
               </div>
               <div className="max-w-[75%] bg-surface border border-border rounded-2xl rounded-tl-md px-4 py-3">
                 {completedToolCalls.length > 0 && (
@@ -637,8 +567,11 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
           {/* Typing Indicator */}
           {loading && !streamingContent && activeToolCalls.length === 0 && completedToolCalls.length === 0 && (
             <div className="flex gap-4">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-sm shrink-0">
-                {config.icon}
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 text-white font-bold"
+                style={{ backgroundColor: config?.widget_color || "#2563eb" }}
+              >
+                {(botName || "A")[0].toUpperCase()}
               </div>
               <div className="bg-surface border border-border rounded-2xl rounded-tl-md px-4 py-3">
                 <div className="flex gap-1.5">
@@ -656,33 +589,13 @@ export default function ChatPage({ params }: { params: Promise<{ agent: string }
         {/* Input Area */}
         <div className="px-6 py-4 border-t border-border bg-card/50 backdrop-blur">
           <div className="flex items-end gap-3 max-w-4xl mx-auto">
-            {/* File upload for revenue/finance agents */}
-            {["revenue", "finance"].includes(agentType) && (
-              <>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv,.xlsx,.xls"
-                  onChange={(e) => handleFileUpload(e.target.files)}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-2.5 rounded-lg border border-border hover:bg-white/5 text-muted/60 hover:text-muted transition-colors shrink-0"
-                  title="Upload CSV/Excel"
-                >
-                  <Upload className="w-5 h-5" />
-                </button>
-              </>
-            )}
-
             <div className="flex-1 relative">
               <textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={`Message ${config.name}...`}
+                placeholder={`Message ${botName}...`}
                 rows={1}
                 className="w-full px-4 py-3 rounded-xl bg-background border border-border text-foreground placeholder:text-muted/60 text-sm resize-none max-h-32 transition-all"
                 style={{ minHeight: "44px" }}

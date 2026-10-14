@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { leadsAPI } from "@/services/api";
+import { apiErrorMessage } from "@/lib/utils";
+import { AlertBanner } from "@/components/ui/alert-banner";
+import { useEscapeKey } from "@/hooks/use-escape-key";
 import type { Lead } from "@/types";
 import {
-  Plus,
   Search,
   Users,
   Loader2,
@@ -28,10 +30,14 @@ export default function LeadsPage() {
   const [newEmail, setNewEmail] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newNotes, setNewNotes] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  useEscapeKey(showCreate, () => setShowCreate(false));
+  useEscapeKey(selectedLead !== null, () => setSelectedLead(null));
 
   const fetchLeads = async () => {
     try {
-      const params: any = {};
+      const params: Record<string, string> = {};
       if (searchQuery) params.search = searchQuery;
       const { data } = await leadsAPI.list(params);
       setLeads(data.leads);
@@ -43,7 +49,12 @@ export default function LeadsPage() {
   };
 
   useEffect(() => {
-    fetchLeads();
+    const t = setTimeout(() => {
+      fetchLeads();
+    }, 0);
+    return () => clearTimeout(t);
+    // fetchLeads intentionally runs once on mount; it reads the current searchQuery
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -51,11 +62,14 @@ export default function LeadsPage() {
       if (searchQuery !== undefined) fetchLeads();
     }, 300);
     return () => clearTimeout(timer);
+    // fetchLeads closes over searchQuery, which is the trigger for this debounce
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
+    setCreateError(null);
     try {
       await leadsAPI.create({
         name: newName,
@@ -69,8 +83,8 @@ export default function LeadsPage() {
       setNewNotes("");
       setShowCreate(false);
       await fetchLeads();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Failed to create lead");
+    } catch (err) {
+      setCreateError(apiErrorMessage(err, "Failed to create lead"));
     } finally {
       setCreating(false);
     }
@@ -91,7 +105,10 @@ export default function LeadsPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowCreate(true)}
+          onClick={() => {
+            setCreateError(null);
+            setShowCreate(true);
+          }}
           className="px-4 py-2.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-sm font-medium hover:from-emerald-600 hover:to-teal-700 transition-all flex items-center gap-2"
         >
           <UserPlus className="w-4 h-4" />
@@ -128,7 +145,7 @@ export default function LeadsPage() {
           <Users className="w-12 h-12 mx-auto text-[var(--text-tertiary)] mb-3" />
           <p className="text-[var(--text-secondary)]">No leads found</p>
           <p className="text-sm text-[var(--text-tertiary)]">
-            Leads will be captured by the Sales Agent or added manually
+            Leads will be captured by your chatbot or added manually
           </p>
         </div>
       ) : (
@@ -197,6 +214,9 @@ export default function LeadsPage() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Lead details"
               className="glass-card p-6 w-full max-w-md"
             >
               <div className="flex items-center justify-between mb-6">
@@ -263,6 +283,9 @@ export default function LeadsPage() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Add lead"
               className="glass-card p-6 w-full max-w-lg"
             >
               <div className="flex items-center justify-between mb-6">
@@ -276,11 +299,13 @@ export default function LeadsPage() {
               </div>
 
               <form onSubmit={handleCreate} className="space-y-4">
+                <AlertBanner message={createError} onDismiss={() => setCreateError(null)} />
                 <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+                  <label htmlFor="lead-name" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
                     Name *
                   </label>
                   <input
+                    id="lead-name"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     required
@@ -289,10 +314,11 @@ export default function LeadsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+                  <label htmlFor="lead-email" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
                     Email *
                   </label>
                   <input
+                    id="lead-email"
                     type="email"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
@@ -302,10 +328,11 @@ export default function LeadsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+                  <label htmlFor="lead-phone" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
                     Phone
                   </label>
                   <input
+                    id="lead-phone"
                     value={newPhone}
                     onChange={(e) => setNewPhone(e.target.value)}
                     placeholder="+1 234 567 8900"
@@ -313,10 +340,11 @@ export default function LeadsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
+                  <label htmlFor="lead-notes" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5">
                     Notes
                   </label>
                   <textarea
+                    id="lead-notes"
                     value={newNotes}
                     onChange={(e) => setNewNotes(e.target.value)}
                     rows={3}

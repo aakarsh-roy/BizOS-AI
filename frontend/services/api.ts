@@ -1,4 +1,5 @@
 import axios from "axios";
+import type { ChatbotConfigUpdate } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
@@ -72,11 +73,11 @@ export const documentsAPI = {
 // ─── Chat ───────────────────────────────────────────────────────────────────
 
 export const chatAPI = {
-  send: (agentType: string, data: { message: string; conversation_id?: string }) =>
-    api.post(`/chat/${agentType}`, data),
-  sendStream: (agentType: string, data: { message: string; conversation_id?: string }) => {
+  send: (data: { message: string; conversation_id?: string }) =>
+    api.post("/chat", data),
+  sendStream: (data: { message: string; conversation_id?: string }) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("bizos_token") : "";
-    return fetch(`${API_BASE_URL}/chat/${agentType}/stream`, {
+    return fetch(`${API_BASE_URL}/chat/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -85,14 +86,16 @@ export const chatAPI = {
       body: JSON.stringify(data),
     });
   },
-  uploadAndChat: (agentType: string, formData: FormData) =>
-    api.post(`/chat/${agentType}/upload`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    }),
-  listConversations: (agentType?: string) =>
-    api.get("/chat/conversations", { params: agentType ? { agent_type: agentType } : {} }),
+  listConversations: () => api.get("/chat/conversations"),
   getMessages: (conversationId: string) =>
     api.get(`/chat/conversations/${conversationId}/messages`),
+};
+
+// ─── Chatbot Configuration ──────────────────────────────────────────────────
+
+export const chatbotAPI = {
+  getConfig: () => api.get("/chatbot"),
+  updateConfig: (data: ChatbotConfigUpdate) => api.put("/chatbot", data),
 };
 
 // ─── Tickets ────────────────────────────────────────────────────────────────

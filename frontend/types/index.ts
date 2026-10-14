@@ -32,9 +32,24 @@ export interface Document {
 export interface Conversation {
   id: string;
   title: string;
-  agent_type: AgentType;
+  agent_type: string; // "chatbot" (dashboard) | "widget" (visitor) | legacy agent names
   created_at: string;
   updated_at: string;
+}
+
+export interface ToolActionResult {
+  success?: boolean;
+  message?: string;
+  error?: string;
+  ticket_id?: string;
+  lead_id?: string;
+  count?: number;
+  [key: string]: unknown;
+}
+
+export interface ToolAction {
+  tool: string;
+  result?: ToolActionResult;
 }
 
 export interface Message {
@@ -42,7 +57,7 @@ export interface Message {
   role: "user" | "assistant" | "system";
   content: string;
   sources: Source[];
-  actions?: any[];
+  actions?: ToolAction[];
   created_at: string;
 }
 
@@ -74,14 +89,44 @@ export interface Lead {
   created_at: string;
 }
 
-export type AgentType = "support" | "sales" | "revenue" | "finance" | "operations";
+export interface EnabledActions {
+  lead_capture: boolean;
+  ticket_creation: boolean;
+}
+
+export interface ChatbotConfig {
+  id: string;
+  company_id: string;
+  public_id: string;
+  name: string;
+  welcome_message: string;
+  tone: "friendly" | "professional" | "concise";
+  system_instructions: string;
+  enabled_actions: EnabledActions;
+  widget_color: string;
+  allowed_origins: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export type ChatbotConfigUpdate = Partial<
+  Pick<
+    ChatbotConfig,
+    | "name"
+    | "welcome_message"
+    | "tone"
+    | "system_instructions"
+    | "enabled_actions"
+    | "widget_color"
+    | "allowed_origins"
+  >
+>;
 
 export interface AnalyticsOverview {
   total_documents: number;
   total_chats: number;
   total_tickets: number;
   total_leads: number;
-  active_agents: number;
   open_tickets: number;
   in_progress_tickets: number;
   resolved_tickets: number;
@@ -93,44 +138,3 @@ export interface ChartData {
   tickets_by_priority: Record<string, number>;
   daily_leads: { date: string; leads: number }[];
 }
-
-export const AGENT_CONFIG: Record<
-  AgentType,
-  { name: string; description: string; icon: string; color: string; gradient: string }
-> = {
-  support: {
-    name: "Customer Support",
-    description: "Answer FAQs, search policies, and manage tickets",
-    icon: "🎧",
-    color: "from-blue-500 to-cyan-500",
-    gradient: "bg-gradient-to-br from-blue-500/10 to-cyan-500/10",
-  },
-  sales: {
-    name: "Sales Agent",
-    description: "Product recommendations and lead capture",
-    icon: "💼",
-    color: "from-emerald-500 to-teal-500",
-    gradient: "bg-gradient-to-br from-emerald-500/10 to-teal-500/10",
-  },
-  revenue: {
-    name: "Revenue Analytics",
-    description: "Analyze revenue data and growth trends",
-    icon: "📊",
-    color: "from-violet-500 to-purple-500",
-    gradient: "bg-gradient-to-br from-violet-500/10 to-purple-500/10",
-  },
-  finance: {
-    name: "Finance Insights",
-    description: "Expense analysis and budget management",
-    icon: "💰",
-    color: "from-amber-500 to-orange-500",
-    gradient: "bg-gradient-to-br from-amber-500/10 to-orange-500/10",
-  },
-  operations: {
-    name: "Operations Manager",
-    description: "Executive summaries and cross-functional insights",
-    icon: "🏢",
-    color: "from-rose-500 to-pink-500",
-    gradient: "bg-gradient-to-br from-rose-500/10 to-pink-500/10",
-  },
-};

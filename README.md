@@ -1,31 +1,29 @@
-# BizOS AI — AI-Powered Business Assistant Platform
+# BizOS AI — Embeddable AI Chatbot Platform
 
-> An AI-powered SaaS platform where businesses can deploy AI employees for customer support, sales, revenue analytics, finance insights, and operations management.
+> A multi-tenant SaaS platform where businesses create, configure, and embed a single AI-powered chatbot on their websites — grounded in their own documents, with optional lead capture and support-ticket actions.
 
-![BizOS AI](https://img.shields.io/badge/BizOS-AI-blue?style=for-the-badge) ![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js) ![FastAPI](https://img.shields.io/badge/FastAPI-Python-green?style=for-the-badge&logo=fastapi) ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green?style=for-the-badge&logo=mongodb)
+![BizOS AI](https://img.shields.io/badge/BizOS-AI-blue?style=for-the-badge) ![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js) ![FastAPI](https://img.shields.io/badge/FastAPI-Python-green?style=for-the-badge&logo=fastapi) ![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-green?style=for-the-badge&logo=mongodb)
 
 ## Features
 
-- 🎧 **Customer Support Agent** — Answers FAQs, searches knowledge base, creates tickets
-- 💼 **Sales Agent** — Product recommendations, lead capture, consultative selling
-- 📊 **Revenue Analytics Agent** — CSV/Excel analysis, revenue trends, growth insights
-- 💰 **Finance Insights Agent** — Expense analysis, budget management, cost savings
-- 🏢 **Operations Manager Agent** — Cross-functional executive summaries
-- 📚 **Knowledge Base** — Upload PDFs, DOCX, TXT; import websites (crawl up to 20 pages)
-- 💬 **ChatGPT-style UI** — Real-time streaming, markdown, source citations
-- 🎫 **Ticket System** — Create, track, and manage support tickets
-- 👥 **Lead Management** — Search, filter, and track sales leads
-- 📈 **Analytics Dashboard** — Charts for agent usage, conversations, tickets, leads
-- 🔐 **Multi-tenant** — Isolated workspaces per company with role-based access
+- 🤖 **Single configurable chatbot** — name, welcome message, tone, business instructions, and enabled actions per workspace
+- 📚 **Knowledge Base (RAG)** — upload PDFs, DOCX, TXT; import websites (crawl up to 20 pages); MongoDB Atlas Vector Search
+- 💬 **Streaming chat** — SSE streaming, markdown rendering, live tool-call indicators, source citations
+- 🎫 **Support tickets** — the chatbot creates tickets through a validated, tenant-scoped tool
+- 👥 **Lead capture** — natural lead qualification, saved to the workspace CRM
+- 🔌 **Embeddable widget** — floating launcher, copy-paste snippet, public chatbot ID, origin restrictions, rate-limited public API
+- 📈 **Analytics** — conversations, leads, tickets, and usage over time
+- 🔐 **Multi-tenant** — JWT auth, workspace-scoped data access on every operation
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Next.js 15, TypeScript, Tailwind CSS, shadcn/ui, Framer Motion, Recharts |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS, shadcn/ui, Framer Motion, Recharts |
 | Backend | Python 3.12+, FastAPI, Pydantic, LangChain |
 | Database | MongoDB Atlas |
-| AI | Gemini API (Google) |
+| Chat LLM | Groq (`openai/gpt-oss-20b`) |
+| Embeddings | Google Gemini embeddings (`gemini-embedding-2`, 3072 dims) |
 | Vector Search | MongoDB Atlas Vector Search |
 | Storage | Cloudinary |
 | Deployment | Vercel (Frontend), Render (Backend) |
@@ -34,29 +32,29 @@
 
 ```
 BizOS AI/
-├── frontend/                # Next.js 15 App Router
+├── frontend/                # Next.js 16 App Router
 │   ├── app/
-│   │   ├── (auth)/         # Login, Register
-│   │   ├── (dashboard)/    # Dashboard, Chat, Tickets, Leads, Analytics
-│   │   └── onboarding/     # Company setup
-│   ├── components/         # Reusable UI components
-│   ├── hooks/              # Custom React hooks
-│   ├── services/           # API service layer
-│   ├── types/              # TypeScript types
-│   └── lib/                # Utilities
+│   │   ├── (auth)/          # Login, Register
+│   │   ├── (dashboard)/     # Overview, My Chatbot, Conversations, Knowledge,
+│   │   │                    # Leads, Tickets, Analytics, Install
+│   │   └── onboarding/      # Company setup
+│   ├── components/          # Reusable UI components
+│   ├── hooks/               # Custom React hooks
+│   ├── public/widget.js     # Embeddable website chat widget
+│   ├── services/            # API service layer
+│   ├── types/               # TypeScript types
+│   └── lib/                 # Utilities
 │
 ├── backend/                 # FastAPI Backend
 │   ├── app/
-│   │   ├── api/            # Route handlers
-│   │   ├── agents/         # 5 AI agents
-│   │   ├── models/         # MongoDB document models
-│   │   ├── schemas/        # Pydantic validation schemas
-│   │   ├── services/       # Business logic
-│   │   ├── rag/            # Retrieval-Augmented Generation
-│   │   ├── vectorstore/    # Vector search integration
-│   │   ├── middleware/     # Auth, RBAC
-│   │   └── main.py         # FastAPI app entry point
-│   └── tests/              # Pytest test suite
+│   │   ├── api/             # Route handlers (auth, chat, chatbot, documents, ...)
+│   │   ├── middleware/      # Auth, rate limiting
+│   │   ├── schemas/         # Pydantic validation schemas
+│   │   ├── services/        # Chatbot orchestration, tools, document processing
+│   │   ├── rag/             # Retrieval (chunk retrieval, context formatting)
+│   │   ├── vectorstore/     # MongoDB Atlas Vector Search integration
+│   │   └── main.py          # FastAPI app entry point
+│   └── tests/               # Pytest test suite
 ```
 
 ## Installation & Setup
@@ -66,7 +64,8 @@ BizOS AI/
 - Python 3.12+
 - Node.js 18+
 - MongoDB Atlas account (free M0 cluster)
-- Gemini API key (Google AI Studio)
+- Groq API key (chat LLM)
+- Google AI Studio API key (embeddings)
 - Cloudinary account (free tier)
 
 ### 1. Clone & Setup Backend
@@ -93,10 +92,7 @@ cp .env.example .env
 ```bash
 cd frontend
 
-# Install dependencies
 npm install
-
-# The .env.local is already configured for local dev
 ```
 
 ### 3. Environment Variables
@@ -108,7 +104,9 @@ npm install
 | `MONGODB_URI` | MongoDB Atlas connection string |
 | `DATABASE_NAME` | Database name (default: `bizos_ai`) |
 | `JWT_SECRET_KEY` | Secret for JWT token signing |
-| `GEMINI_API_KEY` | Google Gemini API key |
+| `GROQ_API_KEY` | Groq API key (chat completions) |
+| `GROQ_MODEL` | Groq chat model (default: `openai/gpt-oss-20b`) |
+| `GEMINI_API_KEY` | Google Gemini API key (embeddings) |
 | `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name |
 | `CLOUDINARY_API_KEY` | Cloudinary API key |
 | `CLOUDINARY_API_SECRET` | Cloudinary API secret |
@@ -118,7 +116,9 @@ npm install
 
 | Variable | Description |
 |----------|-------------|
-| `NEXT_PUBLIC_API_URL` | Backend API base URL |
+| `NEXT_PUBLIC_API_URL` | Backend API base URL (e.g. `https://your-backend.onrender.com/api`) |
+| `NEXT_PUBLIC_SITE_URL` | Canonical frontend URL used in the widget embed snippet (e.g. `https://your-app.vercel.app`). Falls back to the current origin. |
+| `NEXT_PUBLIC_DEMO_CHATBOT_ID` | Optional public chatbot ID powering the landing-page live demo with a real backend. If unset, the demo runs a built-in script. The same ID also loads the real floating site widget (requires `NEXT_PUBLIC_API_URL`); the widget renders nothing when either is unset. The demo chatbot's allowed origins must be blank or include the landing domain, or widget chats return 403. |
 
 ### 4. MongoDB Atlas Setup
 
@@ -135,18 +135,16 @@ npm install
     {
       "type": "vector",
       "path": "embedding",
-      "numDimensions": 768,
+      "numDimensions": 3072,
       "similarity": "cosine"
+    },
+    {
+      "type": "filter",
+      "path": "company_id"
     }
   ]
 }
 ```
-
-### 5. Gemini API Setup
-
-1. Go to [Google AI Studio](https://aistudio.google.com/)
-2. Create an API key
-3. Copy it to `GEMINI_API_KEY`
 
 ## Running Locally
 
@@ -173,15 +171,19 @@ Visit **http://localhost:3000** to use the app.
 | POST | `/api/auth/register` | Register new user |
 | POST | `/api/auth/login` | Login |
 | GET | `/api/auth/me` | Get current user |
-| POST | `/api/companies/` | Create company |
+| POST | `/api/companies/` | Create company (creates default chatbot) |
 | GET | `/api/companies/me` | Get user's company |
+| GET/PUT | `/api/chatbot` | Get/update chatbot configuration |
+| GET | `/api/chatbot/public/{public_id}` | Public widget branding (name, welcome, color) |
+| POST | `/api/chat/stream` | Chat (authenticated, SSE streaming) |
+| POST | `/api/chat` | Chat (authenticated, non-streaming) |
+| POST | `/api/chat/widget/stream` | Chat (public widget, rate-limited, SSE) |
+| GET | `/api/chat/conversations` | List conversations |
+| GET | `/api/chat/conversations/{id}/messages` | Get conversation messages |
 | GET | `/api/documents/` | List documents |
 | POST | `/api/documents/upload` | Upload document |
 | DELETE | `/api/documents/{id}` | Delete document |
 | POST | `/api/knowledge/crawl` | Crawl website |
-| POST | `/api/chat/{agent}` | Chat with agent |
-| POST | `/api/chat/{agent}/stream` | Chat with SSE streaming |
-| GET | `/api/chat/conversations` | List conversations |
 | GET | `/api/tickets/` | List tickets |
 | POST | `/api/tickets/` | Create ticket |
 | PATCH | `/api/tickets/{id}` | Update ticket |
@@ -189,6 +191,29 @@ Visit **http://localhost:3000** to use the app.
 | POST | `/api/leads/` | Create lead |
 | GET | `/api/analytics/overview` | Get stats overview |
 | GET | `/api/analytics/charts` | Get chart data |
+
+## Embedding the Widget
+
+From the **Install** page (or My Chatbot), copy the generated snippet:
+
+```html
+<script
+  src="https://YOUR-FRONTEND-DOMAIN/widget.js"
+  data-chatbot-id="PUBLIC_CHATBOT_ID"
+  data-api-url="https://YOUR-BACKEND-DOMAIN/api"
+  async
+></script>
+```
+
+The snippet contains no secrets — only a public chatbot identifier and API base URL.
+
+Optional attributes:
+
+| Attribute | Values | Default | Description |
+|---|---|---|---|
+| `data-theme` | `light`, `dark` | `light` | Widget color scheme |
+| `data-position` | `bottom-right`, `bottom-left` | `bottom-right` | Launcher corner |
+| `data-greeting-delay` | seconds (e.g. `10`) | off (`0`) | Show a proactive greeting bubble after N seconds (once per session) |
 
 ## Deployment
 
@@ -200,13 +225,13 @@ Visit **http://localhost:3000** to use the app.
 4. Set the root directory to `backend`
 5. Build command: `pip install -r requirements.txt`
 6. Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-7. Add all environment variables from `.env`
+7. Add all environment variables from `.env` (including `GROQ_API_KEY`)
 
 ### Deploy Frontend to Vercel
 
 1. Import your GitHub repo on [Vercel](https://vercel.com)
 2. Set the root directory to `frontend`
-3. Set `NEXT_PUBLIC_API_URL` to your Render backend URL
+3. Set `NEXT_PUBLIC_API_URL` to your Render backend URL + `/api`
 4. Deploy
 
 ## Testing
@@ -215,6 +240,8 @@ Visit **http://localhost:3000** to use the app.
 cd backend
 pytest tests/ -v
 ```
+
+Tests that write data use the MongoDB instance configured in `backend/.env`.
 
 ## License
 

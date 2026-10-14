@@ -32,8 +32,22 @@ const buttonVariants = cva(
   }
 )
 
+// Native animation/drag handlers that framer-motion redefines with different
+// signatures — excluded so ButtonProps stay assignable to motion.button.
+type MotionConflictKeys =
+  | "onAnimationStart"
+  | "onAnimationEnd"
+  | "onTransitionEnd"
+  | "onDrag"
+  | "onDragStart"
+  | "onDragEnd"
+  | "onDragOver"
+  | "onDragEnter"
+  | "onDragLeave"
+  | "onDrop";
+
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, MotionConflictKeys>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean
 }
@@ -59,7 +73,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         whileTap={{ scale: 0.98 }}
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
-        {...(props as any)}
+        {...props}
       />
     )
   }

@@ -43,6 +43,10 @@ async def create_company(
     result = await db.companies.insert_one(company_doc)
     company_id = str(result.inserted_id)
 
+    # Create the workspace's default chatbot configuration
+    from app.api.chatbot import default_chatbot_doc
+    await db.chatbots.insert_one(default_chatbot_doc(company_id, request.name))
+
     # Update user with company_id
     await db.users.update_one(
         {"_id": ObjectId(current_user["_id"])},

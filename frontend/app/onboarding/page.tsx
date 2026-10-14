@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { apiErrorMessage } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowRight, Building2, Zap } from "lucide-react";
+import { ArrowRight, Building2 } from "lucide-react";
 
 const industries = [
   "Technology",
@@ -23,7 +24,7 @@ const industries = [
 ];
 
 export default function OnboardingPage() {
-  const { createCompany, isAuthenticated, isLoading } = useAuth();
+  const { createCompany, isLoading } = useAuth();
   const router = useRouter();
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("");
@@ -45,8 +46,8 @@ export default function OnboardingPage() {
         description: description || undefined,
       });
       router.push("/dashboard");
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "Failed to create company");
+    } catch (err) {
+      setError(apiErrorMessage(err, "Failed to create company"));
     } finally {
       setLoading(false);
     }
@@ -87,7 +88,7 @@ export default function OnboardingPage() {
           </div>
 
           <p className="text-[var(--text-secondary)] text-sm mb-6 mt-4">
-            Tell us about your company so our AI agents can better assist you.
+            Tell us about your company so your AI chatbot can better assist your visitors.
           </p>
 
           {error && (

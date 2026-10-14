@@ -23,12 +23,26 @@ import { Loader2, TrendingUp, BarChart3, PieChart as PieIcon } from "lucide-reac
 
 const COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#f43f5e", "#06b6d4"];
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface TooltipEntry {
+  color?: string;
+  name?: string;
+  value?: number | string;
+}
+
+const CustomTooltip = ({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: TooltipEntry[];
+  label?: string | number;
+}) => {
   if (active && payload && payload.length) {
     return (
       <div className="glass-card p-3 text-sm">
         <p className="font-medium mb-1">{label}</p>
-        {payload.map((entry: any, index: number) => (
+        {payload.map((entry, index) => (
           <p key={index} style={{ color: entry.color }}>
             {entry.name}: {entry.value}
           </p>
@@ -98,7 +112,7 @@ export default function AnalyticsPage() {
       >
         <h1 className="text-3xl font-bold">Analytics</h1>
         <p className="text-[var(--text-secondary)] mt-1">
-          Track your AI workspace performance and usage
+          Track your chatbot usage, leads, and support tickets
         </p>
       </motion.div>
 
@@ -128,7 +142,7 @@ export default function AnalyticsPage() {
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Agent Usage Bar Chart */}
+        {/* Conversations by Source Bar Chart */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -137,7 +151,7 @@ export default function AnalyticsPage() {
         >
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 className="w-5 h-5 text-[var(--text-tertiary)]" />
-            <h3 className="font-semibold">Agent Usage</h3>
+            <h3 className="font-semibold">Conversations by Source</h3>
           </div>
           {agentUsageData.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
@@ -162,7 +176,7 @@ export default function AnalyticsPage() {
             </ResponsiveContainer>
           ) : (
             <div className="h-[300px] flex items-center justify-center text-[var(--text-tertiary)]">
-              No data yet — start chatting with agents
+              No data yet — start chatting with your chatbot
             </div>
           )}
         </motion.div>

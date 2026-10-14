@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { apiErrorMessage } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -24,8 +25,8 @@ export default function LoginPage() {
     try {
       await login(email, password);
       router.push("/dashboard");
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "Login failed. Please try again.");
+    } catch (err) {
+      setError(apiErrorMessage(err, "Login failed. Please try again."));
     } finally {
       setLoading(false);
     }
@@ -82,7 +83,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+              <label htmlFor="login-email" className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
                 Email Address
               </label>
               <input
@@ -98,10 +99,9 @@ export default function LoginPage() {
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                <label htmlFor="login-password" className="block text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
                   Password
                 </label>
-                <a href="#" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">Forgot?</a>
               </div>
               <div className="relative">
                 <input

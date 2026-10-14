@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ticketsAPI } from "@/services/api";
+import { apiErrorMessage } from "@/lib/utils";
+import { AlertBanner } from "@/components/ui/alert-banner";
+import { useEscapeKey } from "@/hooks/use-escape-key";
 import type { Ticket } from "@/types";
 import {
   Plus,
@@ -14,6 +17,7 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  type LucideIcon,
 } from "lucide-react";
 
 const statusColors: Record<string, string> = {
@@ -30,7 +34,7 @@ const priorityColors: Record<string, string> = {
   urgent: "bg-rose-500/10 text-rose-400",
 };
 
-const statusIcons: Record<string, any> = {
+const statusIcons: Record<string, LucideIcon> = {
   open: AlertCircle,
   in_progress: Clock,
   resolved: CheckCircle2,
@@ -49,10 +53,14 @@ export default function TicketsPage() {
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newPriority, setNewPriority] = useState("medium");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEscapeKey(showCreate, () => setShowCreate(false));
 
   const fetchTickets = async () => {
     try {
-      const params: any = {};
+      const params: Record<string, string> = {};
       if (statusFilter) params.status = statusFilter;
       const { data } = await ticketsAPI.list(params);
       setTickets(data.tickets);
@@ -64,12 +72,18 @@ export default function TicketsPage() {
   };
 
   useEffect(() => {
-    fetchTickets();
+    const t = setTimeout(() => {
+      fetchTickets();
+    }, 0);
+    return () => clearTimeout(t);
+    // fetchTickets closes over statusFilter, which is this effect's trigger
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
+    setCreateError(null);
     try {
       await ticketsAPI.create({
         title: newTitle,
@@ -81,8 +95,8 @@ export default function TicketsPage() {
       setNewPriority("medium");
       setShowCreate(false);
       await fetchTickets();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Failed to create ticket");
+    } catch (err) {
+      setCreateError(apiErrorMessage(err, "Failed to create ticket"));
     } finally {
       setCreating(false);
     }
@@ -92,10 +106,10 @@ export default function TicketsPage() {
     try {
       await ticketsAPI.update(ticketId, { status: newStatus });
       setTickets((prev) =>
-        prev.map((t) => (t.id === ticketId ? { ...t, status: newStatus as any } : t))
+        prev.map((t) => (t.id === ticketId ? { ...t, status: newStatus as Ticket["status"] } : t))
       );
-    } catch (err) {
-      alert("Failed to update status");
+    } catch {
+      setError("Failed to update status. Please try again.");
     }
   };
 
@@ -118,7 +132,10 @@ export default function TicketsPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowCreate(true)}
+          onClick={() => {
+            setCreateError(null);
+            setShowCreate(true);
+          }}
           className="px-4 py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 text-white text-sm font-medium hover:from-blue-600 hover:to-purple-700 transition-all flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
@@ -160,6 +177,8 @@ export default function TicketsPage() {
         </div>
       </motion.div>
 
+      <AlertBanner message={error} onDismiss={() => setError(null)} />
+
       {/* Ticket List */}
       {loading ? (
         <div className="bg-card border border-border premium-shadow p-12 text-center">
@@ -180,7 +199,7 @@ export default function TicketsPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.03 }}
-                className="bg-card border border-border premium-shadow bg-card border border-border premium-shadow-hover p-5"
+                className="bg-card border border-border rounded-xl premium-shadow p-5"
               >
                 <div className="flex items-start gap-4">
                   <StatusIcon className="w-5 h-5 mt-0.5 shrink-0 text-muted/60" />
@@ -237,6 +256,9 @@ export default function TicketsPage() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Create ticket"
               className="bg-card border border-border premium-shadow p-6 w-full max-w-lg"
             >
               <div className="flex items-center justify-between mb-6">
@@ -250,11 +272,13 @@ export default function TicketsPage() {
               </div>
 
               <form onSubmit={handleCreate} className="space-y-4">
+                <AlertBanner message={createError} onDismiss={() => setCreateError(null)} />
                 <div>
-                  <label className="block text-sm font-medium text-muted mb-1.5">
+                  <label htmlFor="ticket-title" className="block text-sm font-medium text-muted mb-1.5">
                     Title
                   </label>
                   <input
+                    id="ticket-title"
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
                     required
@@ -263,10 +287,11 @@ export default function TicketsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-muted mb-1.5">
+                  <label htmlFor="ticket-description" className="block text-sm font-medium text-muted mb-1.5">
                     Description
                   </label>
                   <textarea
+                    id="ticket-description"
                     value={newDescription}
                     onChange={(e) => setNewDescription(e.target.value)}
                     required
@@ -276,10 +301,11 @@ export default function TicketsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-muted mb-1.5">
+                  <label htmlFor="ticket-priority" className="block text-sm font-medium text-muted mb-1.5">
                     Priority
                   </label>
                   <select
+                    id="ticket-priority"
                     value={newPriority}
                     onChange={(e) => setNewPriority(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-lg bg-background border border-border text-sm appearance-none cursor-pointer"

@@ -24,7 +24,6 @@ async def get_analytics_overview(current_user: dict = Depends(get_current_user))
                 "total_chats": 0,
                 "total_tickets": 0,
                 "total_leads": 0,
-                "active_agents": 5,
             },
         }
 
@@ -48,7 +47,6 @@ async def get_analytics_overview(current_user: dict = Depends(get_current_user))
             "total_chats": total_chats,
             "total_tickets": total_tickets,
             "total_leads": total_leads,
-            "active_agents": 5,
             "open_tickets": open_tickets,
             "in_progress_tickets": in_progress_tickets,
             "resolved_tickets": resolved_tickets,

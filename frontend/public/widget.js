@@ -1,8 +1,32 @@
 (function() {
+    // ── Configuration from the embed snippet ────────────────────────────────
+    const scriptTag = document.currentScript || document.querySelector('script[src*="widget.js"]');
+    const chatbotId = scriptTag ? scriptTag.getAttribute('data-chatbot-id') : null;
+    const legacyCompanyId = scriptTag ? scriptTag.getAttribute('data-company-id') : null;
+    const apiUrl = (scriptTag && scriptTag.getAttribute('data-api-url')) || 'http://localhost:8000/api';
+    const theme = (scriptTag && scriptTag.getAttribute('data-theme')) === 'dark' ? 'dark' : 'light';
+    const position = (scriptTag && scriptTag.getAttribute('data-position')) === 'bottom-left' ? 'bottom-left' : 'bottom-right';
+    const greetingDelaySec = Math.max(0, parseInt((scriptTag && scriptTag.getAttribute('data-greeting-delay')) || '0', 10) || 0);
+    const PUBLIC_CONFIG_URL = chatbotId ? `${apiUrl}/chatbot/public/${encodeURIComponent(chatbotId)}` : null;
+    const CHAT_URL = `${apiUrl}/chat/widget/stream`;
+    const storageKey = 'bizos_conversation_' + (chatbotId || legacyCompanyId || 'default');
+
+    // Branding defaults (overridden by the public config endpoint)
+    const branding = {
+        name: 'Support Assistant',
+        welcome: "Hi! I'm here to help. How can I assist you today?",
+        color: '#2563eb',
+    };
+
     // Inject marked.js for markdown rendering
     const markedScript = document.createElement('script');
     markedScript.src = 'https://cdn.jsdelivr.net/npm/marked/marked.min.js';
     document.head.appendChild(markedScript);
+
+    // Inject DOMPurify to sanitize rendered markdown (untrusted model/KB output)
+    const purifyScript = document.createElement('script');
+    purifyScript.src = 'https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js';
+    document.head.appendChild(purifyScript);
 
     // Inject Styles
     const style = document.createElement('style');
@@ -18,7 +42,7 @@
             width: 64px;
             height: 64px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            background: ${branding.color};
             color: white;
             border: none;
             cursor: pointer;
@@ -31,6 +55,143 @@
         #bizos-chat-button:hover {
             transform: scale(1.08);
             box-shadow: 0 20px 25px -5px rgba(37, 99, 235, 0.4), 0 10px 10px -5px rgba(37, 99, 235, 0.2);
+        }
+        #bizos-widget-container.bizos-left {
+            right: auto;
+            left: 24px;
+        }
+        #bizos-widget-container.bizos-left #bizos-chat-window {
+            right: auto;
+            left: 0;
+            transform-origin: bottom left;
+        }
+        #bizos-widget-container.bizos-left #bizos-greeting {
+            right: auto;
+            left: 0;
+            border-bottom-right-radius: 14px;
+            border-bottom-left-radius: 4px;
+        }
+        /* ── Dark theme ─────────────────────────────────────────────── */
+        #bizos-widget-container.bizos-dark #bizos-chat-window {
+            background: rgba(17, 24, 39, 0.97);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        #bizos-widget-container.bizos-dark #bizos-chat-messages {
+            background-color: #0b1220;
+        }
+        #bizos-widget-container.bizos-dark .bizos-ai {
+            background-color: #1e293b;
+            color: #f1f5f9;
+            border-color: #334155;
+        }
+        #bizos-widget-container.bizos-dark .bizos-message a {
+            color: #93c5fd;
+        }
+        #bizos-widget-container.bizos-dark .bizos-message code {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        #bizos-widget-container.bizos-dark .bizos-sources {
+            border-top-color: #334155;
+        }
+        #bizos-widget-container.bizos-dark .bizos-source-chip {
+            color: #94a3b8;
+            background: #0f172a;
+            border-color: #334155;
+        }
+        #bizos-widget-container.bizos-dark #bizos-chat-input-container {
+            background: #111827;
+            border-top-color: #1f2937;
+        }
+        #bizos-widget-container.bizos-dark #bizos-chat-input {
+            background-color: #0b1220;
+            border-color: #334155;
+            color: #f1f5f9;
+        }
+        #bizos-widget-container.bizos-dark #bizos-chat-input:focus {
+            background-color: #0f172a;
+        }
+        #bizos-widget-container.bizos-dark .bizos-typing-indicator {
+            background: #1e293b;
+            border-color: #334155;
+        }
+        #bizos-widget-container.bizos-dark .bizos-feedback button {
+            border-color: #334155;
+            color: #94a3b8;
+        }
+        #bizos-widget-container.bizos-dark .bizos-feedback button:hover:not(:disabled) {
+            background: #0f172a;
+        }
+        #bizos-widget-container.bizos-dark #bizos-greeting {
+            background: #1e293b;
+            color: #f1f5f9;
+            border-color: #334155;
+        }
+        /* ── Proactive greeting bubble ──────────────────────────────── */
+        #bizos-greeting {
+            display: none;
+            position: absolute;
+            bottom: 76px;
+            right: 0;
+            width: 240px;
+            background: white;
+            color: #1e293b;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            border-bottom-right-radius: 4px;
+            padding: 12px 34px 12px 14px;
+            font-size: 13px;
+            line-height: 1.45;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25);
+            cursor: pointer;
+            animation: bizosMessageSlide 0.3s ease-out;
+        }
+        #bizos-greeting-close {
+            position: absolute;
+            top: 4px;
+            right: 6px;
+            background: none;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 4px;
+        }
+        #bizos-greeting-close:hover {
+            color: #475569;
+        }
+        /* ── Message feedback ───────────────────────────────────────── */
+        .bizos-feedback {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .bizos-feedback button {
+            background: none;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            line-height: 1;
+            padding: 4px 8px;
+            color: #64748b;
+            transition: background 0.2s;
+        }
+        .bizos-feedback button:hover:not(:disabled) {
+            background: #f1f5f9;
+        }
+        .bizos-feedback button:disabled {
+            opacity: 0.55;
+            cursor: default;
+        }
+        .bizos-feedback button.bizos-active {
+            background: #ecfdf5;
+            border-color: #6ee7b7;
+        }
+        .bizos-feedback-thanks {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 8px;
         }
         #bizos-chat-window {
             display: none;
@@ -55,7 +216,7 @@
             100% { opacity: 1; transform: scale(1) translateY(0); }
         }
         #bizos-chat-header {
-            background: linear-gradient(135deg, #1e3a8a, #2563eb);
+            background: linear-gradient(135deg, #1e3a8a, ${branding.color});
             color: white;
             padding: 18px 20px;
             font-weight: 600;
@@ -166,6 +327,29 @@
             border-bottom-left-radius: 4px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
         }
+        .bizos-sources {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .bizos-source-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: #64748b;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 2px 6px;
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
         #bizos-chat-input-container {
             padding: 16px;
             background: white;
@@ -192,7 +376,7 @@
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
         #bizos-send-btn {
-            background: linear-gradient(135deg, #2563eb, #1d4ed8);
+            background: ${branding.color};
             color: white;
             border: none;
             border-radius: 50%;
@@ -260,55 +444,128 @@
     // Create Elements
     const container = document.createElement('div');
     container.id = 'bizos-widget-container';
-    
+    if (theme === 'dark') container.classList.add('bizos-dark');
+    if (position === 'bottom-left') container.classList.add('bizos-left');
+
+    const greetingEl = document.createElement('div');
+    greetingEl.id = 'bizos-greeting';
+    greetingEl.setAttribute('role', 'button');
+    greetingEl.setAttribute('tabindex', '0');
+    greetingEl.setAttribute('aria-label', 'Open chat');
+    greetingEl.innerHTML = '<span id="bizos-greeting-text"></span><button id="bizos-greeting-close" aria-label="Dismiss greeting">&times;</button>';
+
     const button = document.createElement('button');
     button.id = 'bizos-chat-button';
+    button.setAttribute('aria-label', 'Open chat');
     button.innerHTML = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
-    
+
     const chatWindow = document.createElement('div');
     chatWindow.id = 'bizos-chat-window';
     chatWindow.innerHTML = `
         <div id="bizos-chat-header">
             <div class="title">
                 <div class="status-dot"></div>
-                <span>Support Assistant</span>
+                <span id="bizos-chat-title">${branding.name}</span>
             </div>
-            <button id="bizos-close-btn">&times;</button>
+            <button id="bizos-close-btn" aria-label="Close chat">&times;</button>
         </div>
         <div id="bizos-chat-messages">
-            <div class="bizos-message bizos-ai">Hi! I'm here to help. How can I assist you today?</div>
+            <div class="bizos-message bizos-ai" id="bizos-welcome-message">${branding.welcome}</div>
         </div>
         <div id="bizos-chat-input-container">
             <input type="text" id="bizos-chat-input" placeholder="Type a message..." autocomplete="off" />
-            <button id="bizos-send-btn">
+            <button id="bizos-send-btn" aria-label="Send message">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
             </button>
         </div>
     `;
 
+    container.appendChild(greetingEl);
     container.appendChild(chatWindow);
     container.appendChild(button);
     document.body.appendChild(container);
 
-    // Logic
-    const scriptTag = document.currentScript || document.querySelector('script[src*="widget.js"]');
-    const companyId = scriptTag ? scriptTag.getAttribute('data-company-id') : null;
-    let conversationId = sessionStorage.getItem('bizos_conversation_id');
-    
-    const apiUrl = 'http://localhost:8000/api/chat/widget/stream'; // Adjust for production
+    let conversationId = sessionStorage.getItem(storageKey);
 
     const messagesContainer = document.getElementById('bizos-chat-messages');
     const inputField = document.getElementById('bizos-chat-input');
     const sendBtn = document.getElementById('bizos-send-btn');
     let isWaitingForResponse = false;
 
+    // ── Load public branding (name, welcome message, color) ─────────────────
+    if (PUBLIC_CONFIG_URL) {
+        fetch(PUBLIC_CONFIG_URL)
+            .then(function(res) { return res.ok ? res.json() : null; })
+            .then(function(cfg) {
+                if (!cfg) return;
+                branding.name = cfg.name || branding.name;
+                branding.welcome = cfg.welcome_message || branding.welcome;
+                branding.color = cfg.widget_color || branding.color;
+
+                document.getElementById('bizos-chat-title').textContent = branding.name;
+                document.getElementById('bizos-welcome-message').textContent = branding.welcome;
+                inputField.placeholder = 'Type a message...';
+                button.style.background = branding.color;
+                sendBtn.style.background = branding.color;
+                document.getElementById('bizos-chat-header').style.background =
+                    'linear-gradient(135deg, #1e3a8a, ' + branding.color + ')';
+            })
+            .catch(function() { /* keep defaults */ });
+    }
+
     button.addEventListener('click', () => {
+        dismissGreeting(false);
         const isHidden = chatWindow.style.display === '' || chatWindow.style.display === 'none';
         chatWindow.style.display = isHidden ? 'flex' : 'none';
         if (isHidden) {
             inputField.focus();
         }
     });
+
+    // ── Proactive greeting bubble ─────────────────────────────────────
+    let greetingTimer = null;
+    function safeSessionGet(k) {
+        try { return sessionStorage.getItem(k); } catch { return null; }
+    }
+    function safeSessionSet(k, v) {
+        try { sessionStorage.setItem(k, v); } catch { /* storage unavailable */ }
+    }
+    function dismissGreeting(record) {
+        if (greetingTimer) clearTimeout(greetingTimer);
+        greetingTimer = null;
+        greetingEl.style.display = 'none';
+        if (record) safeSessionSet(storageKey + '_greeted', '1');
+    }
+    function scheduleGreeting() {
+        if (!greetingDelaySec) return;
+        if (safeSessionGet(storageKey + '_greeted')) return;
+        if (greetingTimer) clearTimeout(greetingTimer);
+        greetingTimer = setTimeout(function() {
+            if (chatWindow.style.display === 'flex') return;
+            const textEl = document.getElementById('bizos-greeting-text');
+            if (textEl) textEl.textContent = branding.welcome;
+            greetingEl.style.display = 'block';
+        }, greetingDelaySec * 1000);
+    }
+    greetingEl.addEventListener('click', function(e) {
+        if (e.target && e.target.id === 'bizos-greeting-close') return;
+        dismissGreeting(true);
+        chatWindow.style.display = 'flex';
+        inputField.focus();
+    });
+    greetingEl.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            dismissGreeting(true);
+            chatWindow.style.display = 'flex';
+            inputField.focus();
+        }
+    });
+    document.getElementById('bizos-greeting-close').addEventListener('click', function(e) {
+        e.stopPropagation();
+        dismissGreeting(true);
+    });
+    scheduleGreeting();
 
     document.getElementById('bizos-close-btn').addEventListener('click', () => {
         chatWindow.style.display = 'none';
@@ -330,51 +587,111 @@
         if (el) el.remove();
     }
 
-    // Basic markdown fallback if marked.js fails to load
+    // Basic markdown fallback if marked.js fails to load (HTML-escaped)
     function parseMarkdown(text) {
+        const escaped = String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        let html;
         if (typeof marked !== 'undefined') {
-            return marked.parse(text);
+            html = marked.parse(escaped);
+        } else {
+            html = escaped
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/\n/g, '<br>');
         }
-        return text
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/`(.*?)`/g, '<code>$1</code>')
-            .replace(/\n/g, '<br>');
+        if (typeof DOMPurify !== 'undefined') {
+            html = DOMPurify.sanitize(html);
+        }
+        return html;
+    }
+
+    function appendFeedback(messageEl) {
+        if (!messageEl || messageEl.querySelector('.bizos-feedback, .bizos-feedback-thanks')) return;
+
+        const row = document.createElement('div');
+        row.className = 'bizos-feedback';
+        const up = document.createElement('button');
+        up.type = 'button';
+        up.textContent = '👍';
+        up.setAttribute('aria-label', 'This answer was helpful');
+        const down = document.createElement('button');
+        down.type = 'button';
+        down.textContent = '👎';
+        down.setAttribute('aria-label', 'This answer was not helpful');
+
+        function vote(chosen) {
+            up.disabled = true;
+            down.disabled = true;
+            chosen.classList.add('bizos-active');
+            const thanks = document.createElement('div');
+            thanks.className = 'bizos-feedback-thanks';
+            thanks.textContent = 'Thanks for your feedback!';
+            row.replaceWith(thanks);
+        }
+        up.addEventListener('click', function() { vote(up); });
+        down.addEventListener('click', function() { vote(down); });
+        row.appendChild(up);
+        row.appendChild(down);
+        messageEl.appendChild(row);
+    }
+
+    function appendSources(messageEl, sources) {        if (!messageEl || !sources || !sources.length) return;
+        if (messageEl.querySelector('.bizos-sources')) return;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'bizos-sources';
+        sources.forEach(function(src) {
+            const chip = document.createElement('span');
+            chip.className = 'bizos-source-chip';
+            chip.title = src.source || 'Source';
+            chip.textContent = '📄 ' + (src.source || 'Source');
+            wrap.appendChild(chip);
+        });
+        messageEl.appendChild(wrap);
     }
 
     async function sendMessage() {
         const text = inputField.value.trim();
-        if (!text || !companyId || isWaitingForResponse) return;
+        if (!text || isWaitingForResponse) return;
+        if (!chatbotId && !legacyCompanyId) {
+            appendMessage('This chat widget is not configured correctly.', 'bizos-ai');
+            return;
+        }
 
         inputField.value = '';
         inputField.disabled = true;
         sendBtn.disabled = true;
         isWaitingForResponse = true;
-        
+
         appendMessage(text, 'bizos-user');
-        
+
         const typingId = showTypingIndicator();
-        let aiMessageId = null;
         let aiMessageEl = null;
-        let rawContent = "";
+        let rawContent = '';
+        let sources = [];
 
         try {
-            const response = await fetch(apiUrl, {
+            const response = await fetch(CHAT_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    company_id: companyId,
+                    chatbot_id: chatbotId || undefined,
+                    company_id: legacyCompanyId || undefined,
                     message: text,
                     conversation_id: conversationId
                 })
             });
 
             if (!response.ok) {
-                throw new Error("Server error");
+                throw new Error('Server error');
             }
 
             const reader = response.body.getReader();
-            const decoder = new TextDecoder("utf-8");
+            const decoder = new TextDecoder('utf-8');
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -389,30 +706,42 @@
                             const data = JSON.parse(line.slice(6));
                             if (data.type === 'conversation_id') {
                                 conversationId = data.data;
-                                sessionStorage.setItem('bizos_conversation_id', conversationId);
+                                sessionStorage.setItem(storageKey, conversationId);
                             } else if (data.type === 'content') {
                                 if (!aiMessageEl) {
                                     removeTypingIndicator(typingId);
-                                    aiMessageId = 'msg-' + Date.now();
-                                    appendMessage('', 'bizos-ai', aiMessageId);
-                                    aiMessageEl = document.getElementById(aiMessageId);
+                                    aiMessageEl = createMessageElement('bizos-ai');
                                 }
                                 rawContent += data.data;
                                 aiMessageEl.innerHTML = parseMarkdown(rawContent);
                                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                            } else if (data.type === 'sources') {
+                                sources = data.data || [];
                             } else if (data.type === 'error') {
-                                if (!aiMessageEl) removeTypingIndicator(typingId);
-                                appendMessage("Sorry, I encountered an error. Please try again.", 'bizos-ai');
+                                if (!aiMessageEl) {
+                                    removeTypingIndicator(typingId);
+                                    appendMessage(data.data || 'Sorry, I encountered an error. Please try again.', 'bizos-ai');
+                                } else {
+                                    aiMessageEl.innerHTML = parseMarkdown(rawContent);
+                                }
                             }
-                        } catch (e) {
+                        } catch {
                             // ignore parse errors for partial chunks
                         }
                     }
                 }
             }
-        } catch (error) {
+
+            // Append source citations and feedback once the stream is complete
+            if (aiMessageEl) {
+                appendSources(aiMessageEl, sources);
+                appendFeedback(aiMessageEl);
+            } else {
+                removeTypingIndicator(typingId);
+            }
+        } catch {
             removeTypingIndicator(typingId);
-            appendMessage("Sorry, the chat service is currently unavailable.", 'bizos-ai');
+            appendMessage('Sorry, the chat service is currently unavailable.', 'bizos-ai');
         } finally {
             inputField.disabled = false;
             sendBtn.disabled = false;
@@ -426,13 +755,19 @@
         if (e.key === 'Enter') sendMessage();
     });
 
-    function appendMessage(text, className, id = null) {
+    function createMessageElement(className) {
         const msgDiv = document.createElement('div');
         msgDiv.className = `bizos-message ${className}`;
-        if (id) msgDiv.id = id;
-        msgDiv.innerHTML = text ? parseMarkdown(text) : '';
+        msgDiv.id = 'msg-' + Date.now();
         messagesContainer.appendChild(msgDiv);
+        return msgDiv;
+    }
+
+    function appendMessage(text, className) {
+        const msgDiv = createMessageElement(className);
+        msgDiv.innerHTML = text ? parseMarkdown(text) : '';
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        return msgDiv;
     }
 
 })();

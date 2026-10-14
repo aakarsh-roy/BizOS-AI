@@ -1,27 +1,31 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #8B5CF6;
+  --color-primary: #2F6BFF;
   --color-primary-foreground: #FFFFFF;
+
+  --color-primary-hover: #5B8CFF;
   
   --color-secondary: #6366F1;
   --color-secondary-foreground: #FFFFFF;
   
   --color-background: #09090B;
   --color-background-secondary: #0F172A;
+  --color-foreground: #FFFFFF;
   
-  --color-surface: #111827;
-  --color-card: #151A24;
+  --color-surface: #0E131D;
+  --color-card: #11161F;
+  --color-card-foreground: #FFFFFF;
   --color-popover: #101624;
   --color-sidebar: #0C111B;
   
   --color-text-primary: #FFFFFF;
-  --color-text-secondary: #A1A1AA;
-  --color-muted: #71717A;
+  --color-text-secondary: #A7AEBB;
+  --color-muted: #8A93A3;
   
-  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border: rgba(255, 255, 255, 0.08);
   --color-input: rgba(255, 255, 255, 0.1);
-  --color-ring: #8B5CF6;
+  --color-ring: #2F6BFF;
   
   --color-blue: #3B82F6;
   --color-green: #10B981;
@@ -35,8 +39,10 @@
   --radius-sm: 12px;
   --radius-xs: 8px;
 
-  --font-sans: "Geist", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "Geist Mono", monospace;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Space Grotesk", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
 @layer base {
@@ -95,6 +101,148 @@
     radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.05), transparent 30%);
   z-index: -1;
   pointer-events: none;
+}
+
+/* Legacy compatibility tokens (used by auth/onboarding/knowledge/leads pages) */
+:root {
+  --bg-primary: #09090B;
+  --bg-secondary: #0E131D;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --border-primary: rgba(255, 255, 255, 0.08);
+  --border-secondary: rgba(255, 255, 255, 0.14);
+  --text-secondary: #A7AEBB;
+  --text-tertiary: #8A93A3;
+  --accent-blue: #2F6BFF;
+  --accent-rose: #F43F5E;
+}
+
+/* Glass cards */
+.glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+}
+
+.glass-card-hover {
+  transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 300ms, border-color 300ms;
+}
+.glass-card-hover:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), 0 0 20px rgba(139, 92, 246, 0.12);
+}
+
+/* Primary gradient button */
+.btn-primary {
+  background: linear-gradient(135deg, #3B82F6, #8B5CF6);
+  color: #FFFFFF;
+  box-shadow: 0 2px 10px rgba(139, 92, 246, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: box-shadow 200ms, filter 200ms, transform 200ms;
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* Decorative backgrounds */
+.bg-mesh {
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.12), transparent 40%),
+    radial-gradient(circle at 80% 30%, rgba(139, 92, 246, 0.12), transparent 40%),
+    radial-gradient(circle at 50% 80%, rgba(236, 72, 153, 0.08), transparent 40%);
+}
+
+.dot-grid {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Landing light theme (route-scoped: only under .landing) ──────────────
+   The authenticated dashboard and widget never use the .landing class, so
+   these tokens cannot affect them. Warm off-white editorial system with a
+   restrained cobalt identity. */
+.landing {
+  --l-bg: #FAF9F5;
+  --l-surface: #FFFFFF;
+  --l-alt: #F1F3F7;
+  --l-ink: #17191F;
+  --l-secondary: #656A73;
+  --l-muted: #858B98;
+  --l-accent: #2F6BFF;
+  --l-accent-hover: #2458E6;
+  --l-line: #E5E3DD;
+  --l-dark: #151922;
+  --l-success: #3D8B5F;
+}
+
+.landing .l-btn-primary {
+  background-color: var(--l-accent);
+  color: #FFFFFF;
+  border-radius: 8px;
+  transition: background-color 200ms;
+}
+.landing .l-btn-primary:hover:not(:disabled) {
+  background-color: var(--l-accent-hover);
+}
+
+.landing .l-btn-secondary {
+  background-color: transparent;
+  color: var(--l-ink);
+  border: 1px solid var(--l-line);
+  border-radius: 8px;
+  transition: background-color 200ms, border-color 200ms;
+}
+.landing .l-btn-secondary:hover {
+  background-color: var(--l-alt);
+  border-color: #D6D2C7;
+}
+
+.landing .l-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--l-accent);
+  margin-bottom: 20px;
+}
+.landing .l-eyebrow::before {
+  content: "";
+  display: inline-block;
+  height: 1px;
+  width: 32px;
+  background-color: var(--l-accent);
+}
+
+.landing .l-card {
+  background-color: var(--l-surface);
+  border: 1px solid var(--l-line);
+  border-radius: 12px;
+}
+
+.landing :focus-visible {
+  outline: 2px solid var(--l-accent);
+  outline-offset: 2px;
 }
 
 /* Cards & Modals */

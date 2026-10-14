@@ -12,7 +12,8 @@ class ChatMessageRequest(BaseModel):
 
 
 class WidgetChatMessageRequest(BaseModel):
-    company_id: str
+    chatbot_id: Optional[str] = Field(None, max_length=64)
+    company_id: Optional[str] = None  # legacy identifier
     message: str = Field(..., min_length=1, max_length=5000)
     conversation_id: Optional[str] = None
 

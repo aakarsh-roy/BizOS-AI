@@ -3,6 +3,9 @@
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { documentsAPI } from "@/services/api";
+import { apiErrorMessage } from "@/lib/utils";
+import { AlertBanner } from "@/components/ui/alert-banner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Document } from "@/types";
 import {
   Upload,
@@ -13,7 +16,6 @@ import {
   Clock,
   AlertCircle,
   Loader2,
-  X,
   Search,
 } from "lucide-react";
 
@@ -25,6 +27,9 @@ export default function KnowledgeBasePage() {
   const [crawlUrl, setCrawlUrl] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocuments = async () => {
@@ -39,13 +44,17 @@ export default function KnowledgeBasePage() {
   };
 
   useEffect(() => {
-    fetchDocuments();
+    const t = setTimeout(() => {
+      fetchDocuments();
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
     setUploading(true);
+    setError(null);
     try {
       for (const file of Array.from(files)) {
         const formData = new FormData();
@@ -53,8 +62,8 @@ export default function KnowledgeBasePage() {
         await documentsAPI.upload(formData);
       }
       await fetchDocuments();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Upload failed");
+    } catch (err) {
+      setError(apiErrorMessage(err, "Upload failed"));
     } finally {
       setUploading(false);
     }
@@ -65,24 +74,29 @@ export default function KnowledgeBasePage() {
     if (!crawlUrl) return;
 
     setCrawling(true);
+    setError(null);
     try {
       await documentsAPI.crawlWebsite({ url: crawlUrl, max_pages: 20 });
       setCrawlUrl("");
       await fetchDocuments();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Crawl failed");
+    } catch (err) {
+      setError(apiErrorMessage(err, "Crawl failed"));
     } finally {
       setCrawling(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this document and all its processed data?")) return;
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
     try {
-      await documentsAPI.delete(id);
-      setDocuments((prev) => prev.filter((d) => d.id !== id));
-    } catch (err) {
-      alert("Failed to delete document");
+      await documentsAPI.delete(pendingDelete);
+      setDocuments((prev) => prev.filter((d) => d.id !== pendingDelete));
+      setPendingDelete(null);
+    } catch {
+      setError("Failed to delete document");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -121,9 +135,11 @@ export default function KnowledgeBasePage() {
       >
         <h1 className="text-3xl font-bold">Knowledge Base</h1>
         <p className="text-[var(--text-secondary)] mt-1">
-          Upload documents and import websites to train your AI agents
+          Upload documents and import websites to train your AI chatbot
         </p>
       </motion.div>
+
+      <AlertBanner message={error} onDismiss={() => setError(null)} />
 
       {/* Upload & Crawl */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -296,8 +312,9 @@ export default function KnowledgeBasePage() {
                     </div>
 
                     <button
-                      onClick={() => handleDelete(doc.id)}
+                      onClick={() => setPendingDelete(doc.id)}
                       className="p-2 rounded-lg hover:bg-[var(--bg-hover)] text-[var(--text-tertiary)] hover:text-rose-500 transition-colors"
+                      aria-label={`Delete ${doc.filename}`}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -308,6 +325,18 @@ export default function KnowledgeBasePage() {
           </div>
         )}
       </motion.div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete document?"
+        description="This will remove the document and all of its processed knowledge. This cannot be undone."
+        confirmLabel="Delete"
+        confirming={deleting}
+        onConfirm={handleDelete}
+        onCancel={() => {
+          if (!deleting) setPendingDelete(null);
+        }}
+      />
     </div>
   );
 }

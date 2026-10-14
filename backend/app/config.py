@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     # Groq API
     GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "openai/gpt-oss-20b"
 
     # Cloudinary
     CLOUDINARY_CLOUD_NAME: str = ""

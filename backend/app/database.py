@@ -16,7 +16,6 @@ db: AsyncIOMotorDatabase = None
 async def connect_to_mongo():
     """Initialize MongoDB connection."""
     global client, db
-    print(f"Connecting to MongoDB with URI: {settings.MONGODB_URI}")
     client = AsyncIOMotorClient(settings.MONGODB_URI, tlsCAFile=certifi.where(), tlsAllowInvalidCertificates=True)
     db = client[settings.DATABASE_NAME]
 
@@ -31,6 +30,8 @@ async def connect_to_mongo():
     await db.tickets.create_index("company_id")
     await db.leads.create_index("company_id")
     await db.document_chunks.create_index("company_id")
+    await db.chatbots.create_index("company_id", unique=True)
+    await db.chatbots.create_index("public_id", unique=True)
 
     print(f"[SUCCESS] Connected to MongoDB: {settings.DATABASE_NAME}")
 

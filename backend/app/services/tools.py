@@ -1,19 +1,52 @@
 """
-BizOS AI — Agent Tool Registry
-Defines all callable tools that AI agents can invoke.
-Each tool is an async function that operates on the database.
+BizOS AI — Chatbot Tool Registry
+Defines all callable tools the chatbot can invoke.
+Each tool is an async function that operates on the database and is
+tenant-scoped through an injected company_id.
 """
 
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
-from typing import Optional
 
 from app.database import get_database
-from app.services.document_processor import get_embeddings_model
-from app.vectorstore.mongo_vector import MongoVectorStore
+from app.rag.retriever import retrieve_relevant_chunks
 
 
-# ─── Tool Definitions (Gemini function-calling schema) ──────────────────────
+# ─── Tool allowlists ────────────────────────────────────────────────────────
+
+# Tools exposed to the public website widget (safe for anonymous visitors).
+PUBLIC_WIDGET_TOOLS = [
+    "search_knowledge_base",
+    "create_ticket",
+    "create_lead",
+]
+
+# Additional tools available to the authenticated dashboard chat only.
+DASHBOARD_TOOLS = [
+    "search_knowledge_base",
+    "create_ticket",
+    "list_tickets",
+    "update_ticket",
+    "create_lead",
+    "list_leads",
+    "list_documents",
+]
+
+
+def resolve_tool_names(base_tools: list[str], enabled_actions: dict | None) -> list[str]:
+    """Filter a tool list down to the chatbot's enabled actions."""
+    enabled = enabled_actions or {}
+    out = []
+    for name in base_tools:
+        if name == "create_lead" and not enabled.get("lead_capture", True):
+            continue
+        if name == "create_ticket" and not enabled.get("ticket_creation", True):
+            continue
+        out.append(name)
+    return out
+
+
+# ─── Tool Definitions ───────────────────────────────────────────────────────
 
 TOOL_DEFINITIONS = {
     "search_knowledge_base": {
@@ -144,7 +177,7 @@ TOOL_DEFINITIONS = {
                 },
                 "source": {
                     "type": "string",
-                    "description": "How the lead was acquired. Default: 'ai_agent'.",
+                    "description": "How the lead was acquired. Default: 'chatbot'.",
                 },
             },
             "required": ["name", "email"],
@@ -166,59 +199,6 @@ TOOL_DEFINITIONS = {
                 "limit": {
                     "type": "integer",
                     "description": "Max leads to return. Default: 10.",
-                },
-            },
-            "required": [],
-        },
-    },
-    "get_analytics_summary": {
-        "name": "get_analytics_summary",
-        "description": (
-            "Get a live analytics summary for the company: total documents, "
-            "conversations, tickets (by status), leads, and agent usage. "
-            "Use this for executive summaries, dashboards, or when asked about "
-            "overall business metrics."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-        },
-    },
-    "query_ticket_trends": {
-        "name": "query_ticket_trends",
-        "description": (
-            "Get ticket creation trends over time (daily counts for the last N days). "
-            "Use this for trend analysis, workload assessment, or reporting."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "days": {
-                    "type": "integer",
-                    "description": "Number of days to look back. Default: 30.",
-                },
-            },
-            "required": [],
-        },
-    },
-    "query_conversation_stats": {
-        "name": "query_conversation_stats",
-        "description": (
-            "Get conversation statistics: total count, breakdown by agent type, "
-            "and daily trends. Use this to understand how agents are being used."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "days": {
-                    "type": "integer",
-                    "description": "Number of days to look back. Default: 30.",
-                },
-                "agent_type": {
-                    "type": "string",
-                    "enum": ["support", "sales", "revenue", "finance", "operations"],
-                    "description": "Filter by agent type. Omit for all.",
                 },
             },
             "required": [],
@@ -249,13 +229,13 @@ TOOL_DEFINITIONS = {
 async def _search_knowledge_base(company_id: str, query: str, **kwargs) -> dict:
     """Vector-search the knowledge base."""
     try:
-        model = get_embeddings_model()
-        query_embedding = await model.aembed_query(query)
-        results = await MongoVectorStore.similarity_search(
-            query_embedding=query_embedding,
+        # Imported lazily to avoid a circular import (chatbot.py imports tools).
+        from app.services.chatbot import RETRIEVAL_TOP_K, RETRIEVAL_MIN_SCORE
+        results = await retrieve_relevant_chunks(
+            query=query,
             company_id=company_id,
-            top_k=8,
-            min_score=0.5,
+            top_k=RETRIEVAL_TOP_K,
+            min_score=RETRIEVAL_MIN_SCORE,
         )
         if not results:
             return {"found": 0, "message": "No relevant information found in the knowledge base."}
@@ -272,6 +252,8 @@ async def _search_knowledge_base(company_id: str, query: str, **kwargs) -> dict:
 
 async def _create_ticket(company_id: str, title: str, description: str, priority: str = "medium", **kwargs) -> dict:
     """Create a support ticket in MongoDB."""
+    if priority not in ("low", "medium", "high", "urgent"):
+        priority = "medium"
     db = get_database()
     ticket_doc = {
         "title": title,
@@ -279,7 +261,7 @@ async def _create_ticket(company_id: str, title: str, description: str, priority
         "priority": priority,
         "status": "open",
         "company_id": company_id,
-        "created_by": "ai_agent",
+        "created_by": "chatbot",
         "assigned_to": None,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
@@ -304,6 +286,11 @@ async def _list_tickets(company_id: str, status: str = None, priority: str = Non
     if priority:
         query["priority"] = priority
 
+    try:
+        limit = max(1, min(int(limit), 50))
+    except (TypeError, ValueError):
+        limit = 10
+
     cursor = db.tickets.find(query).sort("created_at", -1).limit(limit)
     tickets = []
     async for ticket in cursor:
@@ -316,7 +303,6 @@ async def _list_tickets(company_id: str, status: str = None, priority: str = Non
             "created_at": ticket["created_at"].isoformat(),
         })
 
-    # Also get counts by status
     total = await db.tickets.count_documents({"company_id": company_id})
     open_count = await db.tickets.count_documents({"company_id": company_id, "status": "open"})
     in_progress = await db.tickets.count_documents({"company_id": company_id, "status": "in_progress"})
@@ -333,7 +319,11 @@ async def _list_tickets(company_id: str, status: str = None, priority: str = Non
 async def _update_ticket(company_id: str, ticket_id: str, status: str = None, priority: str = None, **kwargs) -> dict:
     """Update a ticket's status or priority."""
     db = get_database()
-    ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id), "company_id": company_id})
+    try:
+        oid = ObjectId(ticket_id)
+    except Exception:
+        return {"success": False, "error": "Invalid ticket id."}
+    ticket = await db.tickets.find_one({"_id": oid, "company_id": company_id})
     if not ticket:
         return {"success": False, "error": f"Ticket {ticket_id} not found."}
 
@@ -343,7 +333,7 @@ async def _update_ticket(company_id: str, ticket_id: str, status: str = None, pr
     if priority:
         update_data["priority"] = priority
 
-    await db.tickets.update_one({"_id": ObjectId(ticket_id)}, {"$set": update_data})
+    await db.tickets.update_one({"_id": oid}, {"$set": update_data})
     return {
         "success": True,
         "ticket_id": ticket_id,
@@ -353,11 +343,10 @@ async def _update_ticket(company_id: str, ticket_id: str, status: str = None, pr
     }
 
 
-async def _create_lead(company_id: str, name: str, email: str, phone: str = None, notes: str = None, source: str = "ai_agent", **kwargs) -> dict:
+async def _create_lead(company_id: str, name: str, email: str, phone: str = None, notes: str = None, source: str = "chatbot", **kwargs) -> dict:
     """Create a lead in MongoDB."""
     db = get_database()
 
-    # Check for duplicate
     existing = await db.leads.find_one({"company_id": company_id, "email": email})
     if existing:
         return {
@@ -400,6 +389,11 @@ async def _list_leads(company_id: str, search: str = None, limit: int = 10, **kw
             {"email": {"$regex": search, "$options": "i"}},
         ]
 
+    try:
+        limit = max(1, min(int(limit), 50))
+    except (TypeError, ValueError):
+        limit = 10
+
     cursor = db.leads.find(query).sort("created_at", -1).limit(limit)
     leads = []
     async for lead in cursor:
@@ -416,129 +410,14 @@ async def _list_leads(company_id: str, search: str = None, limit: int = 10, **kw
     return {"leads": leads, "count": len(leads), "total_in_system": total}
 
 
-async def _get_analytics_summary(company_id: str, **kwargs) -> dict:
-    """Get live analytics from the database."""
-    db = get_database()
-
-    total_documents = await db.documents.count_documents({"company_id": company_id})
-    total_chats = await db.conversations.count_documents({"company_id": company_id})
-    total_tickets = await db.tickets.count_documents({"company_id": company_id})
-    total_leads = await db.leads.count_documents({"company_id": company_id})
-
-    open_tickets = await db.tickets.count_documents({"company_id": company_id, "status": "open"})
-    in_progress_tickets = await db.tickets.count_documents({"company_id": company_id, "status": "in_progress"})
-    resolved_tickets = await db.tickets.count_documents({"company_id": company_id, "status": "resolved"})
-
-    # Agent usage breakdown
-    agent_pipeline = [
-        {"$match": {"company_id": company_id}},
-        {"$group": {"_id": "$agent_type", "count": {"$sum": 1}}},
-    ]
-    agent_usage = {}
-    async for doc in db.conversations.aggregate(agent_pipeline):
-        agent_usage[doc["_id"]] = doc["count"]
-
-    # Recent activity (last 7 days)
-    week_ago = datetime.now(timezone.utc) - timedelta(days=7)
-    recent_tickets = await db.tickets.count_documents({"company_id": company_id, "created_at": {"$gte": week_ago}})
-    recent_leads = await db.leads.count_documents({"company_id": company_id, "created_at": {"$gte": week_ago}})
-    recent_chats = await db.conversations.count_documents({"company_id": company_id, "created_at": {"$gte": week_ago}})
-
-    return {
-        "total_documents": total_documents,
-        "total_conversations": total_chats,
-        "total_tickets": total_tickets,
-        "total_leads": total_leads,
-        "tickets_open": open_tickets,
-        "tickets_in_progress": in_progress_tickets,
-        "tickets_resolved": resolved_tickets,
-        "agent_usage": agent_usage,
-        "last_7_days": {
-            "new_tickets": recent_tickets,
-            "new_leads": recent_leads,
-            "new_conversations": recent_chats,
-        },
-    }
-
-
-async def _query_ticket_trends(company_id: str, days: int = 30, **kwargs) -> dict:
-    """Get ticket trends over time."""
-    db = get_database()
-    start_date = datetime.now(timezone.utc) - timedelta(days=days)
-
-    pipeline = [
-        {"$match": {"company_id": company_id, "created_at": {"$gte": start_date}}},
-        {"$group": {
-            "_id": {
-                "date": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}},
-                "priority": "$priority",
-            },
-            "count": {"$sum": 1},
-        }},
-        {"$sort": {"_id.date": 1}},
-    ]
-
-    daily_data = {}
-    async for doc in db.tickets.aggregate(pipeline):
-        date = doc["_id"]["date"]
-        priority = doc["_id"]["priority"]
-        if date not in daily_data:
-            daily_data[date] = {"date": date, "total": 0}
-        daily_data[date][priority] = doc["count"]
-        daily_data[date]["total"] += doc["count"]
-
-    total = await db.tickets.count_documents({"company_id": company_id, "created_at": {"$gte": start_date}})
-
-    return {
-        "period_days": days,
-        "total_tickets": total,
-        "daily_breakdown": list(daily_data.values()),
-    }
-
-
-async def _query_conversation_stats(company_id: str, days: int = 30, agent_type: str = None, **kwargs) -> dict:
-    """Get conversation statistics."""
-    db = get_database()
-    start_date = datetime.now(timezone.utc) - timedelta(days=days)
-    match_query = {"company_id": company_id, "created_at": {"$gte": start_date}}
-    if agent_type:
-        match_query["agent_type"] = agent_type
-
-    total = await db.conversations.count_documents(match_query)
-
-    # By agent type
-    type_pipeline = [
-        {"$match": match_query},
-        {"$group": {"_id": "$agent_type", "count": {"$sum": 1}}},
-    ]
-    by_type = {}
-    async for doc in db.conversations.aggregate(type_pipeline):
-        by_type[doc["_id"]] = doc["count"]
-
-    # Daily trend
-    daily_pipeline = [
-        {"$match": match_query},
-        {"$group": {
-            "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}},
-            "count": {"$sum": 1},
-        }},
-        {"$sort": {"_id": 1}},
-    ]
-    daily = []
-    async for doc in db.conversations.aggregate(daily_pipeline):
-        daily.append({"date": doc["_id"], "conversations": doc["count"]})
-
-    return {
-        "period_days": days,
-        "total_conversations": total,
-        "by_agent_type": by_type,
-        "daily_trend": daily,
-    }
-
-
 async def _list_documents(company_id: str, limit: int = 20, **kwargs) -> dict:
     """List documents in the knowledge base."""
     db = get_database()
+    try:
+        limit = max(1, min(int(limit), 50))
+    except (TypeError, ValueError):
+        limit = 20
+
     cursor = db.documents.find({"company_id": company_id}).sort("uploaded_at", -1).limit(limit)
     docs = []
     async for doc in cursor:
@@ -555,7 +434,7 @@ async def _list_documents(company_id: str, limit: int = 20, **kwargs) -> dict:
     return {"documents": docs, "count": len(docs), "total_in_system": total}
 
 
-# ─── Tool Executor ───────────────────────────────────────────────────────────
+# ─── Tool Executor ──────────────────────────────────────────────────────────
 
 TOOL_FUNCTIONS = {
     "search_knowledge_base": _search_knowledge_base,
@@ -564,9 +443,6 @@ TOOL_FUNCTIONS = {
     "update_ticket": _update_ticket,
     "create_lead": _create_lead,
     "list_leads": _list_leads,
-    "get_analytics_summary": _get_analytics_summary,
-    "query_ticket_trends": _query_ticket_trends,
-    "query_conversation_stats": _query_conversation_stats,
     "list_documents": _list_documents,
 }
 
@@ -588,5 +464,5 @@ async def execute_tool(tool_name: str, tool_args: dict, company_id: str) -> dict
 
 
 def get_tool_definitions(tool_names: list[str]) -> list[dict]:
-    """Get Gemini-compatible tool definitions for a list of tool names."""
+    """Get tool definitions for a list of tool names."""
     return [TOOL_DEFINITIONS[name] for name in tool_names if name in TOOL_DEFINITIONS]
