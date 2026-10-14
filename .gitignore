@@ -8,3 +8,9 @@ __pycache__/
 venv/
 .venv/
 .DS_Store
+
+# Local working docs (process notes, not part of the product — never push)
+/agent.txt
+/cleanup.txt
+/design.txt
+/guide.txt
