@@ -118,7 +118,7 @@ npm install
 |----------|-------------|
 | `NEXT_PUBLIC_API_URL` | Backend API base URL (e.g. `https://your-backend.onrender.com/api`) |
 | `NEXT_PUBLIC_SITE_URL` | Canonical frontend URL used in the widget embed snippet (e.g. `https://your-app.vercel.app`). Falls back to the current origin. |
-| `NEXT_PUBLIC_DEMO_CHATBOT_ID` | Optional public chatbot ID powering the landing-page live demo with a real backend. If unset, the demo runs a built-in script. The same ID also loads the real floating site widget (requires `NEXT_PUBLIC_API_URL`); the widget renders nothing when either is unset. The demo chatbot's allowed origins must be blank or include the landing domain, or widget chats return 403. |
+| `NEXT_PUBLIC_DEMO_CHATBOT_ID` | Optional public chatbot ID for a live backend chat on the landing page (workspace demo + floating widget). If unset, both run a built-in scripted demo with zero network calls. The demo chatbot's allowed origins must be blank or include the landing domain, or live widget chats return 403. |
 
 ### 4. MongoDB Atlas Setup
 
@@ -214,6 +214,7 @@ Optional attributes:
 | `data-theme` | `light`, `dark` | `light` | Widget color scheme |
 | `data-position` | `bottom-right`, `bottom-left` | `bottom-right` | Launcher corner |
 | `data-greeting-delay` | seconds (e.g. `10`) | off (`0`) | Show a proactive greeting bubble after N seconds (once per session) |
+| `data-demo` | `scripted` | off | Self-contained sample chat with built-in FAQ answers and generic branding (optional `data-bot-name`, `data-welcome-message`, `data-color` overrides). No backend calls, no registration. |
 
 ## Deployment
 

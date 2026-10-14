@@ -7,16 +7,24 @@
     const theme = (scriptTag && scriptTag.getAttribute('data-theme')) === 'dark' ? 'dark' : 'light';
     const position = (scriptTag && scriptTag.getAttribute('data-position')) === 'bottom-left' ? 'bottom-left' : 'bottom-right';
     const greetingDelaySec = Math.max(0, parseInt((scriptTag && scriptTag.getAttribute('data-greeting-delay')) || '0', 10) || 0);
+    // Scripted demo mode: fully self-contained sample chat, no backend calls.
+    const demoMode = (scriptTag && scriptTag.getAttribute('data-demo')) === 'scripted';
     const PUBLIC_CONFIG_URL = chatbotId ? `${apiUrl}/chatbot/public/${encodeURIComponent(chatbotId)}` : null;
     const CHAT_URL = `${apiUrl}/chat/widget/stream`;
     const storageKey = 'bizos_conversation_' + (chatbotId || legacyCompanyId || 'default');
 
-    // Branding defaults (overridden by the public config endpoint)
+    // Branding defaults (overridden by the public config endpoint, or by
+    // explicit attributes in scripted demo mode)
     const branding = {
         name: 'Support Assistant',
         welcome: "Hi! I'm here to help. How can I assist you today?",
         color: '#2563eb',
     };
+    if (demoMode) {
+        branding.name = (scriptTag && scriptTag.getAttribute('data-bot-name')) || 'BizOS Assistant';
+        branding.welcome = (scriptTag && scriptTag.getAttribute('data-welcome-message')) || branding.welcome;
+        branding.color = (scriptTag && scriptTag.getAttribute('data-color')) || branding.color;
+    }
 
     // Inject marked.js for markdown rendering
     const markedScript = document.createElement('script');
@@ -654,10 +662,41 @@
         messageEl.appendChild(wrap);
     }
 
+    // Scripted answers for demo mode (general product FAQs, beta-honest,
+    // no company identity). Mirrors the landing-page interactive preview.
+    function scriptedReply(input) {
+        const text = String(input).toLowerCase();
+        if (/(price|pricing|cost|plan)/.test(text)) {
+            return "BizOS AI is free while in beta \u2014 one chatbot, knowledge base, embed widget, leads, and tickets included. Paid plans aren't finalized yet, and beta users carry founding terms into them.";
+        }
+        if (/(install|embed|website|wordpress|snippet|add)/.test(text)) {
+            return "Installing takes about a minute: copy the snippet from your Install page and paste it before the closing </body> tag on your site. It works with WordPress, Webflow, Shopify, or plain HTML \u2014 no coding required.";
+        }
+        if (/(lead|leads|sales|capture)/.test(text)) {
+            return "Yes! When lead capture is enabled, I collect a visitor's name, email, and notes mid-conversation and save them straight to the Leads pipeline.";
+        }
+        if (/(ticket|support|help|issue)/.test(text)) {
+            return "I can create support tickets too \u2014 just describe the issue and I'll file one with a trackable reference.";
+        }
+        if (/(document|upload|knowledge|pdf|train)/.test(text)) {
+            return "I answer from uploaded PDFs, DOCX, or TXT files \u2014 or a crawled website \u2014 with cited sources, and I'll say so honestly when something isn't covered.";
+        }
+        if (/(feature|what can|do you do|capable|abilities)/.test(text)) {
+            return "I answer from business documents and websites, capture leads, and file support tickets. Ask me about features, installation, or pricing.";
+        }
+        if (/(hi|hello|hey|yo)\b/.test(text)) {
+            return "Hi there! Ask me what this chatbot can do, how to install it, or whether it captures leads.";
+        }
+        if (/(thank|thanks|great|awesome|cool)/.test(text)) {
+            return "You're welcome! Signup is free and the Install page walks through setup.";
+        }
+        return "Good question! I'm running scripted preview answers here \u2014 the real chatbot answers from business documents and websites.";
+    }
+
     async function sendMessage() {
         const text = inputField.value.trim();
         if (!text || isWaitingForResponse) return;
-        if (!chatbotId && !legacyCompanyId) {
+        if (!demoMode && !chatbotId && !legacyCompanyId) {
             appendMessage('This chat widget is not configured correctly.', 'bizos-ai');
             return;
         }
@@ -673,6 +712,21 @@
         let aiMessageEl = null;
         let rawContent = '';
         let sources = [];
+
+        // Scripted demo: answer locally, no network calls at all.
+        if (demoMode) {
+            await new Promise(function(resolve) {
+                setTimeout(resolve, 700 + Math.min(text.length * 10, 900));
+            });
+            removeTypingIndicator(typingId);
+            const replyEl = appendMessage(scriptedReply(text), 'bizos-ai');
+            appendFeedback(replyEl);
+            inputField.disabled = false;
+            sendBtn.disabled = false;
+            isWaitingForResponse = false;
+            inputField.focus();
+            return;
+        }
 
         try {
             const response = await fetch(CHAT_URL, {

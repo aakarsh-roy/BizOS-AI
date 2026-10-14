@@ -3,23 +3,33 @@
 import Script from "next/script";
 
 /**
- * Dogfoods the real customer widget on the landing page: the exact snippet
- * businesses paste on their sites, floating bottom-right as on any website.
- * Renders nothing unless a demo chatbot is explicitly configured — never a
- * broken or fake widget. No localhost fallback: on production an unset API
- * URL would point visitors' browsers at themselves.
+ * Floating site widget: the exact snippet businesses paste on their sites.
+ * Live backend chat when a demo chatbot is configured, otherwise a fully
+ * self-contained scripted demo (zero network calls, zero registration).
+ * A greeting bubble appears after a few seconds so visitors see the
+ * widget's look without clicking. The landing page therefore always shows
+ * the floating widget.
  */
 export function WidgetEmbed() {
   const chatbotId = process.env.NEXT_PUBLIC_DEMO_CHATBOT_ID || "";
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
 
-  if (!chatbotId || !apiBase) return null;
+  if (chatbotId && apiBase) {
+    return (
+      <Script
+        src="/widget.js"
+        data-chatbot-id={chatbotId}
+        data-api-url={apiBase}
+        strategy="lazyOnload"
+      />
+    );
+  }
 
   return (
     <Script
       src="/widget.js"
-      data-chatbot-id={chatbotId}
-      data-api-url={apiBase}
+      data-demo="scripted"
+      data-greeting-delay="5"
       strategy="lazyOnload"
     />
   );
